@@ -1,0 +1,665 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Расчёт колонок</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Раскладка: узкая рабочая колонка, шаги сверху вниз: файлы → параметры → результат. Палитра: графит и морская волна, как на геологической ведомости. */
+:root{
+  --bg:#f3f5f6; --panel:#ffffff; --fg:#14262b; --muted:#566a70; --line:#d3dcdf; --soft:#e8eef0;
+  --accent:#0d6b78; --accent-fg:#ffffff; --accent-soft:#d9eef1;
+  --ok:#1f7a45; --warn:#9a6200; --bad:#b3261e; --warn-soft:#fbefd3; --ok-soft:#dcf1e4; --bad-soft:#fbe2df;
+  --font:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,'SF Mono',Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f1b1e; --panel:#16272b; --fg:#e3eef0; --muted:#97aeb4; --line:#2a4146; --soft:#1d3237;
+  --accent:#4fc0cf; --accent-fg:#06262b; --accent-soft:#17383e;
+  --ok:#5ccf8c; --warn:#e8b04a; --bad:#ff8f86; --warn-soft:#3a2f14; --ok-soft:#15372433; --bad-soft:#3d1c19;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1b1e; --panel:#16272b; --fg:#e3eef0; --muted:#97aeb4; --line:#2a4146; --soft:#1d3237;
+  --accent:#4fc0cf; --accent-fg:#06262b; --accent-soft:#17383e;
+  --ok:#5ccf8c; --warn:#e8b04a; --bad:#ff8f86; --warn-soft:#3a2f14; --ok-soft:#15372433; --bad-soft:#3d1c19;
+  color-scheme:dark}
+*{box-sizing:border-box}
+html{color-scheme:light}
+body{margin:0}
+body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:15px;line-height:1.5;
+  padding-block:28px 56px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+main{max-width:980px;margin:0 auto;display:flex;flex-direction:column;gap:22px;min-width:0}
+h1{font-size:26px;line-height:1.2;margin:0;font-weight:600;letter-spacing:-.01em;text-wrap:balance}
+h2{font-size:13px;margin:0 0 10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+p{margin:0}
+.lead{color:var(--muted);max-width:68ch;margin-top:6px}
+.files{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px}
+.drop{background:var(--panel);border:1.5px dashed var(--line);border-radius:6px;padding:14px;display:flex;flex-direction:column;gap:6px;cursor:pointer;min-width:0;transition:border-color .15s,background .15s}
+.drop:hover,.drop.over{border-color:var(--accent);background:var(--accent-soft)}
+.drop:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+.drop.ready{border-style:solid;border-color:var(--ok)}
+.drop input{position:absolute;opacity:0;width:1px;height:1px}
+.drop .t{font-weight:600}
+.drop .h{color:var(--muted);font-size:13px}
+.drop .f{font-family:var(--mono);font-size:12.5px;color:var(--ok);overflow-wrap:anywhere;min-height:1.4em}
+.opts{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+label.o{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
+label.o input,label.o select{font:inherit;font-family:var(--mono);font-size:14px;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:7px 8px;min-width:0}
+label.o input:focus,label.o select:focus{outline:2px solid var(--accent);outline-offset:1px}
+.bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+button{font:inherit;font-weight:600;border-radius:5px;padding:10px 18px;border:1px solid var(--accent);background:var(--accent);color:var(--accent-fg);cursor:pointer}
+button.alt{background:transparent;color:var(--accent)}
+button:disabled{opacity:.45;cursor:not-allowed}
+button:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
+.status{font-size:13.5px;color:var(--muted);font-family:var(--mono);overflow-wrap:anywhere}
+.status.err{color:var(--bad)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.stat{background:var(--panel);padding:12px 14px;border:1px solid var(--line);border-radius:6px;min-width:0}
+.stat b{display:block;font-family:var(--mono);font-size:22px;font-weight:500;font-variant-numeric:tabular-nums}
+.stat span{font-size:12.5px;color:var(--muted)}
+.checks{display:flex;flex-direction:column;gap:8px}
+details{background:var(--panel);border:1px solid var(--line);border-radius:6px}
+summary{cursor:pointer;padding:10px 14px;display:flex;gap:10px;align-items:center;justify-content:space-between;list-style:none}
+summary::-webkit-details-marker{display:none}
+summary:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.pill{font-family:var(--mono);font-size:12.5px;padding:2px 9px;border-radius:99px;background:var(--soft);font-variant-numeric:tabular-nums;white-space:nowrap}
+.pill.ok{background:var(--ok-soft);color:var(--ok)} .pill.warn{background:var(--warn-soft);color:var(--warn)} .pill.bad{background:var(--bad-soft);color:var(--bad)}
+.det{padding:0 14px 12px;font-family:var(--mono);font-size:12.5px;color:var(--muted);max-height:240px;overflow:auto;overflow-wrap:anywhere}
+.det div{padding:2px 0;border-top:1px solid var(--soft)}
+.tabs{display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap}
+.tabs button{padding:6px 12px;font-weight:500;font-size:13.5px;background:transparent;color:var(--muted);border-color:var(--line)}
+.tabs button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
+.tw{overflow:auto;border:1px solid var(--line);border-radius:6px;background:var(--panel);max-height:420px}
+table{border-collapse:collapse;width:100%;font-family:var(--mono);font-size:12.5px;font-variant-numeric:tabular-nums}
+th,td{padding:5px 10px;text-align:left;white-space:nowrap;border-bottom:1px solid var(--soft)}
+th{position:sticky;top:0;background:var(--soft);font-family:var(--font);font-weight:600;font-size:12px}
+.note{font-size:13px;color:var(--muted);max-width:76ch}
+.note b{color:var(--fg);font-weight:600}
+.sample{opacity:.9}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+</head><body>
+<main>
+  <header>
+    <h1>Расчёт колонок и фиктивных скважин</h1>
+    <p class="lead">Колонки из DXF, координаты из каталога выработок и ось трассы собираются в одну таблицу для САПР. Между скважинами с шагом больше заданного добавляются фиктивные: слои интерполируются, X и Y берутся с оси по ПК.</p>
+  </header>
+
+  <section>
+    <h2>Файлы</h2>
+    <div class="files">
+      <label class="drop" id="d-dxf"><input type="file" id="f-dxf" accept=".dxf">
+        <span class="t">DXF с колонками</span>
+        <span class="h">Выгрузка из CREDO в UTF-8, русские буквы должны читаться</span>
+        <span class="f" id="n-dxf">Не выбран</span></label>
+      <label class="drop" id="d-doc"><input type="file" id="f-doc" accept=".docx">
+        <span class="t">Каталог выработок</span>
+        <span class="h">Файл Word в формате .docx. Для .doc: «Файл → Сохранить как → .docx»</span>
+        <span class="f" id="n-doc">Не выбран</span></label>
+      <label class="drop" id="d-axis"><input type="file" id="f-axis" accept=".xlsx,.xls,.csv">
+        <span class="t">Ведомость оси</span>
+        <span class="h">Excel: ПК в метрах, X, Y. Три последних числа в строке</span>
+        <span class="f" id="n-axis">Не выбран</span></label>
+    </div>
+  </section>
+
+  <section>
+    <h2>Параметры</h2>
+    <div class="opts">
+      <label class="o" for="o-step">Макс. расстояние, м<input id="o-step" type="number" min="1" step="1" value="20"></label>
+      <label class="o" for="o-round">Округление мощности, м<select id="o-round"><option value="1" selected>0,1</option><option value="2">0,01</option></select></label>
+      <label class="o" for="o-min">Мин. мощность слоя, м<input id="o-min" type="number" min="0" step="0.01" value="0.1"></label>
+      <label class="o" for="o-elev">Отметка фиктивных, м<input id="o-elev" type="number" step="0.01" value="0"></label>
+      <label class="o" for="o-prefix">Префикс имени<input id="o-prefix" type="text" value="Фикт."></label>
+    </div>
+  </section>
+
+  <div class="bar">
+    <button id="run" disabled>Рассчитать</button>
+    <button id="save" class="alt" disabled>Скачать Excel</button>
+    <span class="status" id="status">Выберите три файла.</span>
+  </div>
+
+  <section id="res" hidden>
+    <h2>Итог</h2>
+    <div class="stats" id="stats"></div>
+  </section>
+
+  <section id="chk" hidden>
+    <h2>Проверки</h2>
+    <div class="checks" id="checks"></div>
+  </section>
+
+  <section>
+    <h2 id="pv-h">Формат таблицы</h2>
+    <div class="tabs" id="tabs" hidden></div>
+    <div class="tw"><table id="pv"><thead></thead><tbody></tbody></table></div>
+    <p class="note" id="pv-n" style="margin-top:8px">Пример формата. Расчёт заполнит такую же таблицу: имя и отметка повторяются в каждой строке слоя, ГИЭ с буквой остаётся текстом, X, Y и ПК записаны текстом.</p>
+  </section>
+
+  <p class="note"><b>Как считаются слои.</b> На каждом ПК берётся одна скважина: ближайшая к оси, при равенстве без «+15», затем первая по каталогу. Одинаковые ИГЭ у двух соседей интерполируются по мощности линейно, ИГЭ только у одного соседа выклинивается. Мощность слоя всегда берётся из подписи, глубины не используются. Расстояние считается только по ПК: 120+19 = 12019 м.</p>
+</main>
+
+<script>
+/* Ядро калькулятора: DXF колонок + каталог выработок (EMF из docx) + ось трассы -> таблица со слоями и фиктивными скважинами */
+(function (root) {
+  'use strict';
+  const GK = {};
+
+  /* ---------- вспомогательное ---------- */
+  // round() как в Python: точные "ничьи" (x.25, x.125 ...) уходят к чётному
+  function pyRound(v, d) {
+    const p = Math.pow(10, d);
+    const s = v * p;
+    if (Number.isInteger(v * Math.pow(2, d + 1)) && s - Math.floor(s) === 0.5) {
+      let n = Math.floor(s);
+      if (n % 2 !== 0) n += 1;
+      return n / p;
+    }
+    return Number(v.toFixed(d));
+  }
+  const comma = (s) => String(s).replace('.', ',');
+  const coord = (v) => { const r = pyRound(v, 3); const s = String(r); return comma(Number.isInteger(r) ? s + '.0' : s); };
+  const fnum = (s) => parseFloat(String(s).replace(/\s/g, '').replace(',', '.'));
+  GK.pyRound = pyRound;
+
+  GK.fmtPk = function (m) {
+    const p = Math.floor(m / 100 + 1e-9);
+    let r = m - p * 100;
+    if (r < 0) r = 0;
+    return p + '+' + comma(r.toFixed(2).padStart(5, '0'));
+  };
+  GK.normName = (s) => s.replace(/[\s.]/g, '').toLowerCase().replace(/^скв/, '');
+
+  /* ---------- 1. DXF ---------- */
+  GK.decodeText = function (buf) {
+    try {
+      return { text: new TextDecoder('utf-8', { fatal: true }).decode(buf), enc: 'UTF-8' };
+    } catch (e) {
+      return { text: new TextDecoder('windows-1251').decode(buf), enc: 'windows-1251' };
+    }
+  };
+
+  function cleanMtext(t) {
+    return t
+      .replace(/\\[AHCcQWTpfF][^;]*;/g, '')
+      .replace(/\\P/g, ' ')
+      .replace(/[{}]/g, '')
+      .replace(/\\l/g, '')
+      .trim();
+  }
+
+  GK.parseDxfMtexts = function (text) {
+    const lines = text.split(/\r?\n/);
+    const n = lines.length;
+    const out = [];
+    let section = null, expect = false, cur = null;
+    const flush = () => {
+      if (cur && !cur.paper) out.push({ x: cur.x, y: cur.y, t: cleanMtext(cur.chunks.join('') + cur.last) });
+      cur = null;
+    };
+    for (let i = 0; i + 1 < n; i += 2) {
+      const code = parseInt(lines[i], 10);
+      const val = lines[i + 1];
+      if (code === 0) {
+        flush();
+        if (val === 'SECTION') expect = true;
+        else if (val === 'ENDSEC') section = null;
+        else if (section === 'ENTITIES' && val === 'MTEXT') cur = { chunks: [], last: '', x: 0, y: 0, paper: false };
+      } else if (code === 2 && expect) {
+        section = val.trim();
+        expect = false;
+      } else if (cur) {
+        if (code === 10) cur.x = parseFloat(val);
+        else if (code === 20) cur.y = parseFloat(val);
+        else if (code === 3) cur.chunks.push(val);
+        else if (code === 1) cur.last = val;
+        else if (code === 67 && parseInt(val, 10) === 1) cur.paper = true;
+      }
+    }
+    flush();
+    return out;
+  };
+
+  GK.extractSections = function (mt) {
+    const heads = mt.filter((r) => r.t.startsWith('Наименование'));
+    const isHead = new Set(heads);
+    const blocks = heads.map(() => []);
+    for (const r of mt) {
+      if (isHead.has(r)) continue;
+      let best = -1, bd = Infinity;
+      for (let k = 0; k < heads.length; k++) {
+        const dx = r.x - heads[k].x, dy = r.y - heads[k].y;
+        if (dx >= -125 && dx <= 145 && dy > -300 && dy < 0 && -dy < bd) { bd = -dy; best = k; }
+      }
+      if (best >= 0) blocks[best].push({ dx: r.x - heads[best].x, dy: r.y - heads[best].y, t: r.t });
+    }
+    const secs = [], warns = [];
+    heads.forEach((h, k) => {
+      const v = blocks[k];
+      const name = h.t.split(':').slice(1).join(':').trim();
+      let elev = null, tot = null;
+      for (const b of v) {
+        let m;
+        if ((m = b.t.match(/Абс\. отм\. устья\s*(-?\d+,\d+)/))) elev = m[1];
+        if ((m = b.t.match(/^Общая глубина:\s*(\d+,\d+)/))) tot = m[1];
+      }
+      const byDy = (a, b) => b.dy - a.dy;
+      const th = v.filter((b) => /^\d+,\d\d$/.test(b.t) && b.dx > -42 && b.dy < -30).sort(byDy);
+      const cum = v.filter((b) => /^\d+,\d\d$/.test(b.t) && b.dx < -58 && b.dy < -30).sort(byDy);
+      const ige = /^\d+[а-яА-Я]?$/;
+      const i1 = v.filter((b) => ige.test(b.t) && b.dx >= -4 && b.dx <= 9 && b.dy < -30 && b.dy > -250).sort(byDy);
+      const i2 = v.filter((b) => ige.test(b.t) && b.dx >= 33 && b.dx <= 46 && b.dy < -30).sort(byDy);
+      const T = th.map((b) => fnum(b.t));
+      const w = [];
+      if (elev === null) w.push('нет отметки устья');
+      if (tot === null) w.push('нет «Общей глубины»');
+      else if (Math.abs(T.reduce((a, b) => a + b, 0) - fnum(tot)) > 0.011)
+        w.push('сумма мощностей ' + T.reduce((a, b) => a + b, 0).toFixed(2) + ' ≠ общей глубине ' + tot);
+      let run = 0;
+      const exp = T.map((t) => (run = Math.round((run + t) * 100) / 100));
+      const C = cum.map((b) => fnum(b.t));
+      if (C.length !== exp.length || C.some((c, i) => Math.abs(c - exp[i]) > 0.011))
+        w.push('накопленные глубины не совпадают с мощностями');
+      if (i1.length !== T.length || i1.map((b) => b.t).join() !== i2.map((b) => b.t).join())
+        w.push('коды ИГЭ: слоёв ' + T.length + ', кодов ' + i1.length + '/' + i2.length);
+      const L = [];
+      for (let i = 0; i < Math.min(T.length, i1.length); i++) L.push({ t: T[i], g: i1[i].t });
+      secs.push({ name, elev, total: tot, layers: L, warns: w });
+      if (w.length) warns.push(name + ': ' + w.join('; '));
+    });
+    return { secs, warns };
+  };
+
+  /* ---------- 2. Каталог выработок (EMF внутри docx) ---------- */
+  GK.parseEmfTexts = function (buf) {
+    const dv = new DataView(buf);
+    const out = [];
+    if (buf.byteLength < 88 || dv.getUint32(0, true) !== 1) return null; // не EMF
+    let o = 0;
+    while (o + 8 <= buf.byteLength) {
+      const t = dv.getUint32(o, true), s = dv.getUint32(o + 4, true);
+      if (s < 8) break;
+      if (t === 84 || t === 83) {
+        const x = dv.getInt32(o + 36, true), y = dv.getInt32(o + 40, true);
+        const n = dv.getUint32(o + 44, true), off = dv.getUint32(o + 48, true);
+        let str = '';
+        if (t === 84) for (let k = 0; k < n; k++) str += String.fromCharCode(dv.getUint16(o + off + 2 * k, true));
+        else str = new TextDecoder('windows-1251').decode(new Uint8Array(buf, o + off, n));
+        out.push({ x, y, s: str.trim() });
+      }
+      o += s;
+    }
+    return out;
+  };
+
+  function rowsFromTexts(texts) {
+    const arr = texts.filter((t) => t.s).sort((a, b) => a.y - b.y || a.x - b.x);
+    const lines = [];
+    for (const t of arr) {
+      const last = lines[lines.length - 1];
+      if (last && Math.abs(t.y - last.y) <= 2) last.items.push(t);
+      else lines.push({ y: t.y, items: [t] });
+    }
+    return lines.map((l) => l.items.sort((a, b) => a.x - b.x).map((i) => i.s));
+  }
+
+  // pages: массив массивов {x,y,s}; возвращает строки каталога
+  GK.parseCatalog = function (pages) {
+    const rows = [], skipped = [];
+    for (const texts of pages) {
+      for (const tok of rowsFromTexts(texts)) {
+        if (tok.length < 6 || !/^\d+$/.test(tok[0])) continue;
+        const n = tok.length;
+        const num = parseInt(tok[0], 10);
+        const [X, Y, E, D] = [tok[n - 4], tok[n - 3], tok[n - 2], tok[n - 1]];
+        const cp = /^\d{5,}\s*[.,]\s*\d+$/;
+        if (!cp.test(X) || !cp.test(Y)) { skipped.push(tok.join(' | ')); continue; }
+        const mid = tok.slice(2, n - 4);
+        let pkM = null, pkStr = null, offset = 0;
+        for (const m of mid) {
+          const p = m.match(/^(\d+)\+(\d+(?:[.,]\d+)?)$/);
+          if (p && pkM === null) { pkM = parseInt(p[1], 10) * 100 + fnum(p[2]); pkStr = m; }
+          else if (p) offset = fnum(p[1] + '.' + p[2]);
+          else if (/^\d+[.,]\d+$/.test(m)) offset = fnum(m);
+          else offset = 28.7;
+        }
+        rows.push({ num, name: tok[1], pkM, pkStr, offset, X: X.replace(/\s/g, '').replace('.', ','), Y: Y.replace(/\s/g, '').replace('.', ','), elev: fnum(E), depth: D });
+      }
+    }
+    return { rows, skipped };
+  };
+
+  /* ---------- 3. Ось ---------- */
+  // rows: массив массивов ячеек; берём три последних числа в строке: ПК(м), X, Y
+  GK.parseAxis = function (rows) {
+    const pts = [];
+    for (const r of rows) {
+      const nums = r.filter((c) => typeof c === 'number' || (typeof c === 'string' && /^-?\d+([.,]\d+)?$/.test(c.trim())))
+        .map((c) => (typeof c === 'number' ? c : fnum(c)));
+      if (nums.length >= 3) pts.push(nums.slice(-3));
+    }
+    pts.sort((a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2]);
+    const u = [];
+    for (const p of pts) {
+      const l = u[u.length - 1];
+      if (l && l[0] === p[0] && l[1] === p[1] && l[2] === p[2]) continue;
+      u.push(p);
+    }
+    for (let i = 1; i < u.length; i++) if (u[i][0] === u[i - 1][0]) throw new Error('Ось: одинаковый ПК ' + u[i][0] + ' с разными координатами');
+    return u;
+  };
+
+  /* ---------- 4. difflib.SequenceMatcher (как в Python) ---------- */
+  function opcodes(a, b) {
+    const b2j = new Map();
+    b.forEach((e, j) => { if (!b2j.has(e)) b2j.set(e, []); b2j.get(e).push(j); });
+    const longest = (alo, ahi, blo, bhi) => {
+      let bi = alo, bj = blo, bs = 0, j2 = new Map();
+      for (let i = alo; i < ahi; i++) {
+        const nj = new Map();
+        for (const j of b2j.get(a[i]) || []) {
+          if (j < blo) continue;
+          if (j >= bhi) break;
+          const k = (j2.get(j - 1) || 0) + 1;
+          nj.set(j, k);
+          if (k > bs) { bi = i - k + 1; bj = j - k + 1; bs = k; }
+        }
+        j2 = nj;
+      }
+      return [bi, bj, bs];
+    };
+    const q = [[0, a.length, 0, b.length]], mb = [];
+    while (q.length) {
+      const [alo, ahi, blo, bhi] = q.pop();
+      const [i, j, k] = longest(alo, ahi, blo, bhi);
+      if (k) {
+        mb.push([i, j, k]);
+        if (alo < i && blo < j) q.push([alo, i, blo, j]);
+        if (i + k < ahi && j + k < bhi) q.push([i + k, ahi, j + k, bhi]);
+      }
+    }
+    mb.sort((x, y) => x[0] - y[0] || x[1] - y[1]);
+    const merged = [];
+    let [i1, j1, k1] = [0, 0, 0];
+    for (const [i2, j2, k2] of mb) {
+      if (i1 + k1 === i2 && j1 + k1 === j2) k1 += k2;
+      else { if (k1) merged.push([i1, j1, k1]); [i1, j1, k1] = [i2, j2, k2]; }
+    }
+    if (k1) merged.push([i1, j1, k1]);
+    merged.push([a.length, b.length, 0]);
+    const ops = [];
+    let i = 0, j = 0;
+    for (const [ai, bj, size] of merged) {
+      let tag = '';
+      if (i < ai && j < bj) tag = 'replace';
+      else if (i < ai) tag = 'delete';
+      else if (j < bj) tag = 'insert';
+      if (tag) ops.push([tag, i, ai, j, bj]);
+      i = ai + size; j = bj + size;
+      if (size) ops.push(['equal', ai, i, bj, j]);
+    }
+    return ops;
+  }
+
+  /* ---------- 5. Основной расчёт ---------- */
+  GK.build = function (secs, catRows, axis, opt) {
+    opt = Object.assign({ step: 20, round: 1, minT: 0.1, elevFict: 0, prefix: 'Фикт.' }, opt || {});
+    const checks = { noCatalog: [], noPk: [], elevDiff: [], zeroElev: [], dupCatalog: [], notInTable: 0, fictWarn: [], axisWarn: [] };
+    const cat = new Map();
+    for (const r of catRows) {
+      const k = GK.normName(r.name);
+      if (cat.has(k)) checks.dupCatalog.push(r.name); else cat.set(k, r);
+    }
+    const wells = secs.map((s, idx) => {
+      const c = cat.get(GK.normName(s.name));
+      return { idx, name: s.name, elev: s.elev === null ? null : fnum(s.elev), layers: s.layers, c, pk: c && c.pkM !== null ? c.pkM : null };
+    });
+    const seen = new Set(wells.map((w) => GK.normName(w.name)));
+    checks.notInTable = catRows.filter((r) => !seen.has(GK.normName(r.name))).length;
+    for (const w of wells) {
+      if (!w.c) checks.noCatalog.push(w.name);
+      else if (w.c.pkM === null) checks.noPk.push(w.name);
+      if (w.c && w.elev !== null && Math.abs(w.c.elev - w.elev) > 0.005) checks.elevDiff.push({ name: w.name, dxf: w.elev, cat: w.c.elev });
+      if (w.elev === 0) checks.zeroElev.push(w.name);
+    }
+    const igeVal = (g) => (/^\d+$/.test(g) ? parseInt(g, 10) : g);
+    const realRows = (w) => w.layers.map((l) => [w.name, w.elev, l.t, igeVal(l.g), w.c ? w.c.X : null, w.c ? w.c.Y : null, w.pk === null ? null : GK.fmtPk(w.pk)]);
+
+    const withPk = wells.filter((w) => w.pk !== null).sort((a, b) => a.pk - b.pk || a.c.num - b.c.num || a.idx - b.idx);
+    const noPk = wells.filter((w) => w.pk === null);
+
+    // представитель каждого ПК
+    const byPk = new Map();
+    for (const w of withPk) { if (!byPk.has(w.pk)) byPk.set(w.pk, []); byPk.get(w.pk).push(w); }
+    const U = [...byPk.keys()].sort((a, b) => a - b);
+    const rep = new Map();
+    for (const [pk, list] of byPk) {
+      let best = null, bk = null;
+      for (const w of list) {
+        const key = [w.c.offset, w.name.includes('+') ? 1 : 0, w.c.num];
+        if (!bk || key[0] < bk[0] || (key[0] === bk[0] && (key[1] < bk[1] || (key[1] === bk[1] && key[2] < bk[2])))) { best = w; bk = key; }
+      }
+      rep.set(pk, best);
+    }
+
+    // фиктивные ПК: деление пополам, пока шаг > opt.step
+    const F = [];
+    const split = (a, b, A, B) => {
+      if (b - a > opt.step) { const m = pyRound((a + b) / 2, 2); F.push([m, A, B]); split(a, m, A, B); split(m, b, A, B); }
+    };
+    for (let i = 0; i + 1 < U.length; i++) split(U[i], U[i + 1], U[i], U[i + 1]);
+    F.sort((x, y) => x[0] - y[0]);
+
+    const xs = axis.map((p) => p[0]);
+    const xy = (m) => {
+      if (m < xs[0] || m > xs[xs.length - 1]) checks.axisWarn.push(GK.fmtPk(m));
+      let lo = 0, hi = xs.length;
+      while (lo < hi) { const mid = (lo + hi) >> 1; if (xs[mid] <= m) lo = mid + 1; else hi = mid; }
+      let i = Math.min(Math.max(lo - 1, 0), axis.length - 2);
+      const [m0, x0, y0] = axis[i], [m1, x1, y1] = axis[i + 1];
+      const t = (m - m0) / (m1 - m0);
+      return [x0 + t * (x1 - x0), y0 + t * (y1 - y0)];
+    };
+    const r1 = (v) => pyRound(v, opt.round);
+    const layersAt = (ma, mb, m) => {
+      const a = rep.get(ma).layers, b = rep.get(mb).layers, t = (m - ma) / (mb - ma);
+      const sum = (L) => L.reduce((s, l) => s + l.t, 0);
+      const tot = r1((1 - t) * sum(a) + t * sum(b));
+      const ca = a.map((l) => l.g), cb = b.map((l) => l.g);
+      const out = [];
+      for (const [tag, i1, i2, j1, j2] of opcodes(ca, cb)) {
+        if (tag === 'equal') for (let k = 0; k < i2 - i1; k++) out.push([ca[i1 + k], (1 - t) * a[i1 + k].t + t * b[j1 + k].t]);
+        else {
+          for (let k = i1; k < i2; k++) out.push([ca[k], (1 - t) * a[k].t]);
+          for (let k = j1; k < j2; k++) out.push([cb[k], t * b[k].t]);
+        }
+      }
+      let lay = out.map(([c, th]) => [c, r1(th)]).filter((o) => o[1] >= opt.minT);
+      const res = [];
+      for (const [c, th] of lay) {
+        if (res.length && res[res.length - 1][0] === c) res[res.length - 1][1] = r1(res[res.length - 1][1] + th);
+        else res.push([c, th]);
+      }
+      const diff = r1(tot - res.reduce((s, x) => s + x[1], 0));
+      if (diff && res.length) {
+        let j = 0;
+        res.forEach((x, i) => { if (x[1] > res[j][1]) j = i; });
+        res[j][1] = r1(res[j][1] + diff);
+      }
+      return { layers: res.filter((x) => x[1] > 0), tot };
+    };
+
+    const fictRows = [];
+    for (const [m, A, B] of F) {
+      const { layers, tot } = layersAt(A, B, m);
+      const sum = layers.reduce((s, x) => s + x[1], 0);
+      if (!layers.length || Math.abs(sum - tot) > 0.051) checks.fictWarn.push(GK.fmtPk(m));
+      const [X, Y] = xy(m);
+      const pk = GK.fmtPk(m);
+      for (const [c, th] of layers) fictRows.push({ m, row: [opt.prefix + pk, opt.elevFict, th, igeVal(c), coord(X), coord(Y), pk] });
+    }
+
+    const real = [];
+    for (const w of withPk) for (const r of realRows(w)) real.push({ m: w.pk, row: r });
+    const merged = real.concat(fictRows).map((o, i) => ({ ...o, i })).sort((a, b) => a.m - b.m || a.i - b.i);
+    const unified = merged.map((o) => o.row);
+    for (const w of noPk) for (const r of realRows(w)) unified.push(r);
+
+    const realAll = real.map((o) => o.row);
+    for (const w of noPk) for (const r of realRows(w)) realAll.push(r);
+
+    const stats = {
+      sections: secs.length, realRows: realAll.length, fictWells: F.length, fictRows: fictRows.length,
+      uniquePk: U.length, noPk: noPk.length,
+      maxGap: (() => { const all = U.concat(F.map((f) => f[0])).sort((a, b) => a - b); let g = 0; for (let i = 1; i < all.length; i++) g = Math.max(g, all[i] - all[i - 1]); return Math.round(g * 100) / 100; })(),
+      pkFrom: U.length ? GK.fmtPk(U[0]) : '', pkTo: U.length ? GK.fmtPk(U[U.length - 1]) : '',
+    };
+    return { unified, fict: fictRows.map((o) => o.row), real: realAll, fictPk: F.map((f) => GK.fmtPk(f[0])), checks, stats };
+  };
+
+  GK.HEADER = ['Наименование', 'Абсолютная отметка устья, м', 'Мощность, м', 'ГИЭ', 'X', 'Y', 'ПК'];
+  root.GK = GK;
+  if (typeof module !== 'undefined') module.exports = GK;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const F={dxf:null,doc:null,axis:null};
+  let result=null, wbBuf=null;
+  const SAMPLE=[['Скв.1п',174.1,4.2,10,'280932,25','1270399,36','0+00,00'],['Скв.1п',174.1,1.3,'11а','280932,25','1270399,36','0+00,00'],['Фикт.0+19,25',0,0.1,4,'280961,466','1270394,012','0+19,25']];
+  function setStatus(t,err){const s=$('status');s.textContent=t;s.classList.toggle('err',!!err)}
+  function table(head,rows,max){
+    const th=$('pv').tHead, tb=$('pv').tBodies[0]; th.textContent='';tb.textContent='';
+    const tr=document.createElement('tr');head.forEach(h=>{const c=document.createElement('th');c.textContent=h;tr.appendChild(c)});th.appendChild(tr);
+    rows.slice(0,max||300).forEach(r=>{const x=document.createElement('tr');r.forEach(v=>{const c=document.createElement('td');c.textContent=v===null||v===undefined?'':v;x.appendChild(c)});tb.appendChild(x)});
+  }
+  table(GK.HEADER,SAMPLE);
+  $('pv').classList.add('sample');
+  function ready(){ $('run').disabled=!(F.dxf&&F.doc&&F.axis); if(F.dxf&&F.doc&&F.axis) setStatus('Файлы выбраны. Нажмите «Рассчитать».'); }
+  function bind(k){
+    const inp=$('f-'+k), box=$('d-'+k);
+    const take=f=>{ if(!f)return; F[k]=f; $('n-'+k).textContent=f.name+' · '+(f.size/1048576).toFixed(1)+' МБ'; box.classList.add('ready'); ready(); };
+    inp.addEventListener('change',()=>take(inp.files[0]));
+    ['dragenter','dragover'].forEach(e=>box.addEventListener(e,ev=>{ev.preventDefault();box.classList.add('over')}));
+    ['dragleave','drop'].forEach(e=>box.addEventListener(e,ev=>{ev.preventDefault();box.classList.remove('over')}));
+    box.addEventListener('drop',ev=>take(ev.dataTransfer.files[0]));
+  }
+  ['dxf','doc','axis'].forEach(bind);
+  const tick=()=>new Promise(r=>setTimeout(r,30));
+
+  async function readCatalog(file){
+    if(/\.doc$/i.test(file.name)) throw new Error('Формат .doc не читается. Сохраните файл в Word как .docx и выберите его.');
+    const zip=await JSZip.loadAsync(await file.arrayBuffer());
+    const names=Object.keys(zip.files).filter(n=>/^word\/media\/.*\.(wmf|emf)$/i.test(n)).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
+    if(!names.length) throw new Error('В .docx нет вставленных таблиц-картинок (word/media/*.wmf). Нужен каталог «Приложение Ж».');
+    const pages=[];
+    for(const n of names){ const t=GK.parseEmfTexts(await zip.files[n].async('arraybuffer')); if(t&&t.length) pages.push(t); }
+    if(!pages.length) throw new Error('Не удалось прочитать текст из картинок таблицы.');
+    return pages;
+  }
+
+  $('run').addEventListener('click',async()=>{
+    $('run').disabled=true;$('save').disabled=true;
+    try{
+      setStatus('Читаю DXF…');await tick();
+      const buf=await F.dxf.arrayBuffer();
+      const dec=GK.decodeText(buf);
+      const bad=(dec.text.match(/\uFFFD/g)||[]).length;
+      if(bad>50) throw new Error('В DXF '+bad+' символов-заменителей вместо букв: имена не восстановить. Выгрузите файл в UTF-8 заново.');
+      setStatus('Разбираю разрезы…');await tick();
+      const mt=GK.parseDxfMtexts(dec.text);
+      const ex=GK.extractSections(mt);
+      if(!ex.secs.length) throw new Error('В DXF нет подписей «Наименование:». Это не тот формат колонок.');
+      setStatus('Читаю каталог выработок…');await tick();
+      const pages=await readCatalog(F.doc);
+      const cat=GK.parseCatalog(pages);
+      if(!cat.rows.length) throw new Error('В каталоге не нашлось строк с координатами.');
+      setStatus('Читаю ось…');await tick();
+      const wb0=XLSX.read(await F.axis.arrayBuffer(),{type:'array'});
+      const axis=GK.parseAxis(XLSX.utils.sheet_to_json(wb0.Sheets[wb0.SheetNames[0]],{header:1}));
+      if(axis.length<2) throw new Error('В ведомости оси не нашлось строк ПК, X, Y.');
+      setStatus('Считаю фиктивные скважины…');await tick();
+      const opt={step:parseFloat($('o-step').value)||20,round:parseInt($('o-round').value,10),minT:parseFloat($('o-min').value)||0.1,elevFict:parseFloat($('o-elev').value)||0,prefix:$('o-prefix').value};
+      const res=GK.build(ex.secs,cat.rows,axis,opt);
+      result={res,ex,cat,dec};
+      render(result);
+      setStatus('Готово. Можно скачать Excel.');
+      $('save').disabled=false;
+    }catch(e){ console.error(e); setStatus(e.message||String(e),true); }
+    $('run').disabled=false;
+  });
+
+  function render(r){
+    const {res,ex,cat}=r, s=res.stats, c=res.checks;
+    const items=[[s.sections,'разрезов в DXF'],[s.realRows,'строк слоёв'],[s.uniquePk,'уникальных ПК'],[s.fictWells,'фиктивных скважин'],[s.fictRows,'строк фиктивных'],[s.maxGap.toFixed(2).replace('.',','),'макс. шаг, м'],[s.pkFrom+' – '+s.pkTo,'диапазон ПК']];
+    const st=$('stats');st.textContent='';
+    items.forEach(([v,l])=>{const d=document.createElement('div');d.className='stat';const b=document.createElement('b');b.textContent=v;const sp=document.createElement('span');sp.textContent=l;d.append(b,sp);st.appendChild(d)});
+    $('res').hidden=false;
+    const list=[
+      ['Предупреждения по разрезам DXF',ex.warns,ex.warns.length?'warn':'ok','Мощность взята из подписи слоя, глубины не использовались.'],
+      ['Скважины без строки в каталоге',c.noCatalog,c.noCatalog.length?'warn':'ok','Без X, Y и ПК, в расчёт расстояний не входят.'],
+      ['В каталоге нет ПК',c.noPk,c.noPk.length?'warn':'ok','X и Y есть, ПК нет.'],
+      ['Отметка устья 0,00 на чертеже',c.zeroElev,c.zeroElev.length?'warn':'ok','Оставлена как есть.'],
+      ['Отметка на чертеже и в каталоге различается',c.elevDiff.map(e=>e.name+': чертёж '+e.dxf+' / каталог '+e.cat),c.elevDiff.length?'warn':'ok','В таблице отметка с чертежа.'],
+      ['Дубли имён в каталоге',c.dupCatalog,c.dupCatalog.length?'bad':'ok',''],
+      ['Строки каталога не разобраны',cat.skipped,cat.skipped.length?'bad':'ok',''],
+      ['Фиктивные ПК вне оси или с ошибкой слоёв',c.axisWarn.concat(c.fictWarn),(c.axisWarn.length+c.fictWarn.length)?'bad':'ok','']
+    ];
+    const box=$('checks');box.textContent='';
+    list.forEach(([t,arr,cls,hint])=>{
+      const d=document.createElement('details');
+      const sm=document.createElement('summary');const a=document.createElement('span');a.textContent=t;const p=document.createElement('span');p.className='pill '+cls;p.textContent=arr.length?String(arr.length):'нет';sm.append(a,p);d.appendChild(sm);
+      if(arr.length||hint){const dt=document.createElement('div');dt.className='det';if(hint){const h=document.createElement('div');h.textContent=hint;dt.appendChild(h)}arr.slice(0,400).forEach(x=>{const e=document.createElement('div');e.textContent=x;dt.appendChild(e)});d.appendChild(dt)}
+      box.appendChild(d);
+    });
+    $('chk').hidden=false;
+    const tabs=$('tabs');tabs.hidden=false;tabs.textContent='';
+    const views=[['Единая таблица',res.unified,GK.HEADER],['Фиктивные скважины',res.fict,GK.HEADER],['ПК фиктивных',res.fictPk.map(x=>[x]),['ПК']]];
+    views.forEach(([n,rows,h],i)=>{
+      const b=document.createElement('button');b.textContent=n+' ('+rows.length+')';b.setAttribute('aria-pressed',i===0?'true':'false');
+      b.addEventListener('click',()=>{tabs.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed','false'));b.setAttribute('aria-pressed','true');table(h,rows,300);$('pv-n').textContent='Показаны первые 300 строк. В Excel попадут все.'});
+      tabs.appendChild(b);
+    });
+    $('pv-h').textContent='Результат';$('pv').classList.remove('sample');
+    table(GK.HEADER,res.unified,300);$('pv-n').textContent='Показаны первые 300 строк. В Excel попадут все.';
+  }
+
+  function buildWorkbook(r){
+    const {res,ex,cat}=r, c=res.checks;
+    const wb=XLSX.utils.book_new();
+    const add=(name,aoa,w)=>{const ws=XLSX.utils.aoa_to_sheet(aoa);ws['!cols']=w.map(x=>({wch:x}));XLSX.utils.book_append_sheet(wb,ws,name)};
+    add('Единая таблица',[GK.HEADER].concat(res.unified),[22,28,14,8,16,16,14]);
+    add('Фиктивные скважины',[GK.HEADER].concat(res.fict),[22,28,14,8,16,16,14]);
+    add('ПК фиктивных',[['ПК']].concat(res.fictPk.map(x=>[x])),[16]);
+    const chk=[['Проверка','Объект','Деталь']];
+    ex.warns.forEach(x=>chk.push(['Разрез DXF',x,'']));
+    c.noCatalog.forEach(x=>chk.push(['Нет в каталоге',x,'']));
+    c.noPk.forEach(x=>chk.push(['Нет ПК в каталоге',x,'']));
+    c.zeroElev.forEach(x=>chk.push(['Отметка 0,00 на чертеже',x,'']));
+    c.elevDiff.forEach(e=>chk.push(['Отметка чертёж/каталог',e.name,e.dxf+' / '+e.cat]));
+    c.dupCatalog.forEach(x=>chk.push(['Дубль в каталоге',x,'']));
+    cat.skipped.forEach(x=>chk.push(['Строка каталога не разобрана',x,'']));
+    add('Проверка',chk,[32,40,30]);
+    return XLSX.write(wb,{type:'array',bookType:'xlsx'});
+  }
+
+  $('save').addEventListener('click',async()=>{
+    if(!result) return;
+    try{
+      const buf=buildWorkbook(result);
+      const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+      const dl=await (window.claude&&window.claude.use?window.claude.use('downloads'):null);
+      if(dl){ await dl.save({filename:'Колонки_с_фиктивными_скважинами.xlsx',data:blob}); }
+      else { const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='kolonki_s_fiktivnymi_skvazhinami.xlsx'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),4000); }
+      setStatus('Файл сохранён.');
+    }catch(e){ if(e&&e.code==='declined') setStatus('Сохранение отменено.'); else setStatus((e&&e.message)||'Не удалось сохранить файл.',true); }
+  });
+})();
+</script>
+</body></html>
