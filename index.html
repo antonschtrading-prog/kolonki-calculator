@@ -645,7 +645,7 @@ $('dxf-export').addEventListener('click',()=>{
    if(a.borders.length!==b.borders.length)continue;
    for(let j=0;j<a.borders.length;j++)line(x(a.w),y(a.borders[j]),x(b.w),y(b.borders[j]),j===0?'УСТЬЯ':'ГРАНИЦЫ_СЛОЕВ');
   }
-  const out=['0','SECTION','2','HEADER','9','$ACADVER','1','AC1009','0','ENDSEC','0','SECTION','2','ENTITIES',...entities,'0','ENDSEC','0','EOF'].join('\\r\\n');
+  const out=['0','SECTION','2','HEADER','9','$ACADVER','1','AC1009','0','ENDSEC','0','SECTION','2','ENTITIES',...entities,'0','ENDSEC','0','EOF'].join('\r\n');
   const blob=new Blob([out],{type:'application/dxf'}),url=URL.createObjectURL(blob),a=document.createElement('a');
   a.href=url;a.download='Геологический_профиль_5000_100.dxf';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),5000);
   status('Геологический DXF сформирован. Проверьте границы слоёв в САПР.');
