@@ -98,7 +98,7 @@ th{position:sticky;top:0;background:var(--soft);font-family:var(--font);font-wei
 <section id="res" hidden><h2>Итог</h2><div class="stats" id="stats"></div></section>
 <section id="chk" hidden><h2>Проверки</h2><div class="checks" id="checks"></div></section>
 <section><h2 id="pv-h">Предпросмотр ведомости</h2><div class="tabs" id="tabs" hidden></div><div class="tw"><table id="pv"><thead></thead><tbody></tbody></table></div><p class="note" id="pv-n">После расчёта здесь появятся результаты.</p></section>
-<p class="note"><b>Методика.</b> Между соседними исходными ПК создаётся минимальное число равных промежутков не длиннее заданного шага. При равном числе слоёв интерполируются мощности по порядку. При разном числе отсутствующие слои выклиниваются к середине интервала. Отметки фиктивных скважин — 0,00. Неоднозначные ИГЭ помечаются для проверки.</p>
+<p class="note"><b>Методика.</b> Между соседними исходными ПК создаётся минимальное число равных промежутков не длиннее заданного шага. При равном числе слоёв интерполируются мощности по порядку. При разном числе отсутствующие слои выклиниваются к середине интервала. Отметки Z фиктивных скважин линейно интерполируются между исходными по ПК. Неоднозначные ИГЭ помечаются для проверки.</p>
 </main>
 
 <script>
@@ -578,7 +578,9 @@ function calc(wells,axis,step,round,prefix){
     th=Number(th.toFixed(round));if(th>0)layers.push([layer.g,th]);
    }
    if(!layers.length)warnings.push('ПК '+fmt(p)+': все слои имеют нулевую мощность');
-   for(const [g,t] of layers)fict.push([fmt(p),name,x,y,0,t,g]);
+   const z=Number.isFinite(A.z)&&Number.isFinite(B.z)?fmt(A.z+(B.z-A.z)*f):null;
+   if(z===null)warnings.push('ПК '+fmt(p)+': нет исходных отметок Z для интерполяции');
+   for(const [g,t] of layers)fict.push([fmt(p),name,x,y,z,t,g]);
   }
  }
  const all=original.concat(fict).sort((a,b)=>a[0]-b[0]||a[1].localeCompare(b[1],'ru'));
