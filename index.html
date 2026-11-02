@@ -83,64 +83,22 @@ th{position:sticky;top:0;background:var(--soft);font-family:var(--font);font-wei
 
 </head><body>
 <main>
-  <header>
-    <h1>Расчёт колонок и фиктивных скважин</h1>
-    <p class="lead">Колонки из DXF, координаты из каталога выработок и ось трассы собираются в одну таблицу для САПР. Между скважинами с шагом больше заданного добавляются фиктивные: слои интерполируются, X и Y берутся с оси по ПК.</p>
-  </header>
-
-  <section>
-    <h2>Файлы</h2>
-    <div class="files">
-      <label class="drop" id="d-dxf"><input type="file" id="f-dxf" accept=".dxf">
-        <span class="t">DXF с колонками</span>
-        <span class="h">Выгрузка из CREDO в UTF-8, русские буквы должны читаться</span>
-        <span class="f" id="n-dxf">Не выбран</span></label>
-      <label class="drop" id="d-doc"><input type="file" id="f-doc" accept=".docx">
-        <span class="t">Каталог выработок</span>
-        <span class="h">Файл Word в формате .docx. Для .doc: «Файл → Сохранить как → .docx»</span>
-        <span class="f" id="n-doc">Не выбран</span></label>
-      <label class="drop" id="d-axis"><input type="file" id="f-axis" accept=".xlsx,.xls,.csv">
-        <span class="t">Ведомость оси</span>
-        <span class="h">Excel: ПК в метрах, X, Y. Три последних числа в строке</span>
-        <span class="f" id="n-axis">Не выбран</span></label>
-    </div>
-  </section>
-
-  <section>
-    <h2>Параметры</h2>
-    <div class="opts">
-      <label class="o" for="o-step">Макс. расстояние, м<input id="o-step" type="number" min="1" step="1" value="20"></label>
-      <label class="o" for="o-round">Округление мощности, м<select id="o-round"><option value="1" selected>0,1</option><option value="2">0,01</option></select></label>
-      <label class="o" for="o-min">Мин. мощность слоя, м<input id="o-min" type="number" min="0" step="0.01" value="0.1"></label>
-      <label class="o" for="o-elev">Отметка фиктивных, м<input id="o-elev" type="number" step="0.01" value="0"></label>
-      <label class="o" for="o-prefix">Префикс имени<input id="o-prefix" type="text" value="Фикт."></label>
-    </div>
-  </section>
-
-  <div class="bar">
-    <button id="run" disabled>Рассчитать</button>
-    <button id="save" class="alt" disabled>Скачать Excel</button>
-    <span class="status" id="status">Выберите три файла.</span>
-  </div>
-
-  <section id="res" hidden>
-    <h2>Итог</h2>
-    <div class="stats" id="stats"></div>
-  </section>
-
-  <section id="chk" hidden>
-    <h2>Проверки</h2>
-    <div class="checks" id="checks"></div>
-  </section>
-
-  <section>
-    <h2 id="pv-h">Формат таблицы</h2>
-    <div class="tabs" id="tabs" hidden></div>
-    <div class="tw"><table id="pv"><thead></thead><tbody></tbody></table></div>
-    <p class="note" id="pv-n" style="margin-top:8px">Пример формата. Расчёт заполнит такую же таблицу: имя и отметка повторяются в каждой строке слоя, ГИЭ с буквой остаётся текстом, X, Y и ПК записаны текстом.</p>
-  </section>
-
-  <p class="note"><b>Как считаются слои.</b> На каждом ПК берётся одна скважина: ближайшая к оси, при равенстве без «+15», затем первая по каталогу. Одинаковые ИГЭ у двух соседей интерполируются по мощности линейно, ИГЭ только у одного соседа выклинивается. Мощность слоя всегда берётся из подписи, глубины не используются. Расстояние считается только по ПК: 120+19 = 12019 м.</p>
+<header><h1>Расчёт колонок и фиктивных скважин</h1><p class="lead">Расчёт по двум ведомостям Excel без DXF и Word. Сопоставляются только соседние исходные скважины по ПК.</p></header>
+<section><h2>Исходные Excel-файлы</h2><div class="files">
+<label class="drop" id="d-wells"><input type="file" id="f-wells" accept=".xlsx,.xls"><span class="t">Ведомость скважин</span><span class="h">ПК, Наименование, X, Y, Z, Мощность, ИГЭ (или ГИЭ)</span><span class="f" id="n-wells">Не выбран</span></label>
+<label class="drop" id="d-axis"><input type="file" id="f-axis" accept=".xlsx,.xls"><span class="t">Ведомость координат оси</span><span class="h">ПК в метрах, X, Y</span><span class="f" id="n-axis">Не выбран</span></label>
+</div></section>
+<section><h2>Параметры</h2><div class="opts">
+<label class="o" for="o-step">Максимальный шаг, м<input id="o-step" type="number" min="0.01" step="1" value="50"></label>
+<label class="o" for="o-round">Округление мощности<select id="o-round"><option value="1">0,1 м</option><option value="2" selected>0,01 м</option><option value="3">0,001 м</option></select></label>
+<label class="o" for="o-prefix">Префикс имени<input id="o-prefix" value="Фикт."></label>
+<label class="o" for="o-export">Состав выгрузки<select id="o-export"><option value="all">Исходные и фиктивные</option><option value="fict">Только фиктивные</option></select></label>
+</div></section>
+<div class="bar"><button id="run" disabled>Рассчитать</button><button id="save" class="alt" disabled>Скачать Excel</button><span class="status" id="status">Выберите два файла.</span></div>
+<section id="res" hidden><h2>Итог</h2><div class="stats" id="stats"></div></section>
+<section id="chk" hidden><h2>Проверки</h2><div class="checks" id="checks"></div></section>
+<section><h2 id="pv-h">Предпросмотр ведомости</h2><div class="tabs" id="tabs" hidden></div><div class="tw"><table id="pv"><thead></thead><tbody></tbody></table></div><p class="note" id="pv-n">После расчёта здесь появятся результаты.</p></section>
+<p class="note"><b>Методика.</b> Между соседними исходными ПК создаётся минимальное число равных промежутков не длиннее заданного шага. При равном числе слоёв интерполируются мощности по порядку. При разном числе отсутствующие слои выклиниваются к середине интервала. Отметки фиктивных скважин — 0,00. Неоднозначные ИГЭ помечаются для проверки.</p>
 </main>
 
 <script>
@@ -529,137 +487,141 @@ th{position:sticky;top:0;background:var(--soft);font-family:var(--font);font-wei
 </script>
 <script>
 (function(){
-  const $=id=>document.getElementById(id);
-  const F={dxf:null,doc:null,axis:null};
-  let result=null, wbBuf=null;
-  const SAMPLE=[['Скв.1п',174.1,4.2,10,'280932,25','1270399,36','0+00,00'],['Скв.1п',174.1,1.3,'11а','280932,25','1270399,36','0+00,00'],['Фикт.0+19,25',0,0.1,4,'280961,466','1270394,012','0+19,25']];
-  function setStatus(t,err){const s=$('status');s.textContent=t;s.classList.toggle('err',!!err)}
-  function table(head,rows,max){
-    const th=$('pv').tHead, tb=$('pv').tBodies[0]; th.textContent='';tb.textContent='';
-    const tr=document.createElement('tr');head.forEach(h=>{const c=document.createElement('th');c.textContent=h;tr.appendChild(c)});th.appendChild(tr);
-    rows.slice(0,max||300).forEach(r=>{const x=document.createElement('tr');r.forEach(v=>{const c=document.createElement('td');c.textContent=v===null||v===undefined?'':v;x.appendChild(c)});tb.appendChild(x)});
+'use strict';
+const $=id=>document.getElementById(id), F={wells:null,axis:null};
+let result=null;
+const HEAD=['ПК','Наименование','Координата X, м','Координата Y, м','Z','Мощность, м','ИГЭ'];
+const num=v=>{if(typeof v==='number')return Number.isFinite(v)?v:NaN;return Number(String(v??'').replace(/\s/g,'').replace(',','.'))};
+const fmt=v=>Number(v.toFixed(6));
+function pk(v){if(typeof v==='number')return v;const s=String(v??'').trim();const m=s.match(/^(\d+)\+(\d+(?:[.,]\d+)?)$/);return m?Number(m[1])*100+num(m[2]):num(s)}
+function status(t,error=false){$('status').textContent=t;$('status').classList.toggle('err',error)}
+function bind(k){const el=$('f-'+k),box=$('d-'+k);function set(f){if(!f)return;F[k]=f;$('n-'+k).textContent=f.name;box.classList.add('ready');$('run').disabled=!(F.wells&&F.axis);status(F.wells&&F.axis?'Файлы выбраны. Нажмите «Рассчитать».':'Выберите второй файл.')}el.addEventListener('change',()=>set(el.files[0]));['dragover','dragenter'].forEach(e=>box.addEventListener(e,x=>{x.preventDefault();box.classList.add('over')}));['dragleave','drop'].forEach(e=>box.addEventListener(e,x=>{x.preventDefault();box.classList.remove('over')}));box.addEventListener('drop',e=>set(e.dataTransfer.files[0]))}
+['wells','axis'].forEach(bind);
+async function read(file){const wb=XLSX.read(await file.arrayBuffer(),{type:'array'});return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:''})}
+function parseWells(rows,warnings){
+ const header=rows.findIndex(r=>r.some(v=>/наименование/i.test(String(v)))&&r.some(v=>/мощност/i.test(String(v))));
+ if(header<0)throw Error('В ведомости скважин не найдены заголовки «Наименование» и «Мощность».');
+ const h=rows[header].map(x=>String(x).toLowerCase().replace(/\s/g,''));
+ const col=(re)=>h.findIndex(x=>re.test(x));
+ const idx={p:col(/^пк$|пикетаж/),n:col(/наименование/),x:col(/^(координата)?x/),y:col(/^(координата)?y/),z:col(/^z$|абсолютнаяотметка|абс\.отм/),t:col(/мощност/),g:col(/игэ|гиэ/)};
+ if(Object.values(idx).some(x=>x<0))throw Error('Не хватает столбцов: ПК, Наименование, X, Y, Z, Мощность, ИГЭ.');
+ const groups=new Map();
+ for(let i=header+1;i<rows.length;i++){
+  const r=rows[i];if(r.every(x=>x===''||x===null))continue;
+  const p=pk(r[idx.p]),name=String(r[idx.n]??'').trim(),x=num(r[idx.x]),y=num(r[idx.y]),z=num(r[idx.z]),t=num(r[idx.t]),g=String(r[idx.g]??'').trim();
+  if(!Number.isFinite(p)||!name||!Number.isFinite(t)||!g){warnings.push('Строка '+(i+1)+': неполные данные скважины/слоя');continue}
+  if(!Number.isFinite(x)||!Number.isFinite(y)){warnings.push('Строка '+(i+1)+': нет координат X/Y');continue}
+  if(t<=0){warnings.push('Строка '+(i+1)+': неположительная мощность');continue}
+  const key=p+'|'+name; if(!groups.has(key))groups.set(key,{p,name,x,y,z:Number.isFinite(z)?z:0,layers:[]});
+  groups.get(key).layers.push({g,t});
+ }
+ const wells=[...groups.values()].sort((a,b)=>a.p-b.p||a.name.localeCompare(b.name,'ru'));
+ if(wells.length<2)throw Error('Для расчёта нужны минимум две исходные скважины.');
+ return wells;
+}
+function parseAxis(rows){
+ const pts=GK.parseAxis(rows);
+ if(pts.length<2)throw Error('Ведомость оси: не найдены минимум две точки ПК, X, Y.');
+ return pts;
+}
+function axisXY(axis,p,warnings){
+ if(p<axis[0][0]||p>axis[axis.length-1][0]){warnings.push('ПК '+p+': вне диапазона ведомости оси');return [null,null]}
+ let lo=0,hi=axis.length-1;
+ while(lo<hi){const mid=(lo+hi+1)>>1;if(axis[mid][0]<=p)lo=mid;else hi=mid-1}
+ const a=axis[Math.min(lo,axis.length-2)],b=axis[Math.min(lo+1,axis.length-1)],f=(p-a[0])/(b[0]-a[0]);
+ return [fmt(a[1]+f*(b[1]-a[1])),fmt(a[2]+f*(b[2]-a[2]))];
+}
+function align(A,B,warnings){
+ const a=A.layers,b=B.layers;
+ if(a.length===b.length){
+  const pairs=a.map((x,i)=>({g:x.g,l:x.t,r:b[i].t}));
+  for(let i=0;i<a.length;i++)if(a[i].g!==b[i].g)warnings.push(A.name+' → '+B.name+': слой '+(i+1)+' имеет разные ИГЭ ('+a[i].g+' / '+b[i].g+'); для фиктивных взят левый код');
+  return pairs;
+ }
+ const ops=GK.opcodes?GK.opcodes(a.map(x=>x.g),b.map(x=>x.g)):null;
+ // Совпадающие коды привязываются по порядку; лишние слои сводятся к нулю в середине.
+ const dp=Array.from({length:a.length+1},()=>Array(b.length+1).fill(0));
+ for(let i=a.length-1;i>=0;i--)for(let j=b.length-1;j>=0;j--)dp[i][j]=a[i].g===b[j].g?1+dp[i+1][j+1]:Math.max(dp[i+1][j],dp[i][j+1]);
+ const out=[];let i=0,j=0;
+ while(i<a.length||j<b.length){
+  if(i<a.length&&j<b.length&&a[i].g===b[j].g){out.push({g:a[i].g,l:a[i].t,r:b[j].t});i++;j++}
+  else if(i<a.length&&(j===b.length||dp[i+1][j]>=dp[i][j+1])){out.push({g:a[i].g,l:a[i].t,r:0});i++}
+  else {out.push({g:b[j].g,l:0,r:b[j].t});j++}
+ }
+ warnings.push(A.name+' → '+B.name+': разное количество слоёв ('+a.length+' / '+b.length+'); проверьте сопоставление ИГЭ');
+ return out;
+}
+function calc(wells,axis,step,round,prefix){
+ const warnings=[],original=[],fict=[],comparison=[];
+ for(const w of wells)for(const l of w.layers)original.push([fmt(w.p),w.name,w.x,w.y,w.z,fmt(l.t),l.g]);
+ const byPk=new Map();
+ for(const w of wells){if(!byPk.has(w.p))byPk.set(w.p,[]);byPk.get(w.p).push(w)}
+ const pkList=[...byPk.keys()].sort((a,b)=>a-b);
+ const reps=pkList.map(p=>{const list=byPk.get(p);if(list.length>1)warnings.push('ПК '+p+': '+list.length+' скважин; для интерполяции выбрана ближайшая к оси');const xy=axisXY(axis,p,warnings);return list.slice().sort((a,b)=>(a.x-xy[0])**2+(a.y-xy[1])**2-((b.x-xy[0])**2+(b.y-xy[1])**2))[0]});
+ let seq=0,maxGap=0;
+ for(let k=0;k<reps.length-1;k++){
+  const A=reps[k],B=reps[k+1],d=B.p-A.p,n=Math.ceil(d/step);
+  if(n<1)continue;maxGap=Math.max(maxGap,d/n);
+  const pairs=align(A,B,warnings);
+  comparison.push([A.name,B.name,fmt(A.p),fmt(B.p),A.layers.length,B.layers.length,n-1]);
+  for(let j=1;j<n;j++){
+   const f=j/n,p=A.p+d*f,[x,y]=axisXY(axis,p,warnings),name=prefix+String(++seq).padStart(4,'0');
+   const layers=[];
+   for(const layer of pairs){
+    let th;
+    if(layer.l===0)th=layer.r*Math.max(0,(f-0.5)/0.5);
+    else if(layer.r===0)th=layer.l*Math.max(0,(0.5-f)/0.5);
+    else th=layer.l+(layer.r-layer.l)*f;
+    th=Number(th.toFixed(round));if(th>0)layers.push([layer.g,th]);
+   }
+   if(!layers.length)warnings.push('ПК '+fmt(p)+': все слои имеют нулевую мощность');
+   for(const [g,t] of layers)fict.push([fmt(p),name,x,y,0,t,g]);
   }
-  table(GK.HEADER,SAMPLE);
-  $('pv').classList.add('sample');
-  function ready(){ $('run').disabled=!(F.dxf&&F.doc&&F.axis); if(F.dxf&&F.doc&&F.axis) setStatus('Файлы выбраны. Нажмите «Рассчитать».'); }
-  function bind(k){
-    const inp=$('f-'+k), box=$('d-'+k);
-    const take=f=>{ if(!f)return; F[k]=f; $('n-'+k).textContent=f.name+' · '+(f.size/1048576).toFixed(1)+' МБ'; box.classList.add('ready'); ready(); };
-    inp.addEventListener('change',()=>take(inp.files[0]));
-    ['dragenter','dragover'].forEach(e=>box.addEventListener(e,ev=>{ev.preventDefault();box.classList.add('over')}));
-    ['dragleave','drop'].forEach(e=>box.addEventListener(e,ev=>{ev.preventDefault();box.classList.remove('over')}));
-    box.addEventListener('drop',ev=>take(ev.dataTransfer.files[0]));
-  }
-  ['dxf','doc','axis'].forEach(bind);
-  const tick=()=>new Promise(r=>setTimeout(r,30));
-
-  async function readCatalog(file){
-    if(/\.doc$/i.test(file.name)) throw new Error('Формат .doc не читается. Сохраните файл в Word как .docx и выберите его.');
-    const zip=await JSZip.loadAsync(await file.arrayBuffer());
-    const names=Object.keys(zip.files).filter(n=>/^word\/media\/.*\.(wmf|emf)$/i.test(n)).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
-    if(!names.length) throw new Error('В .docx нет вставленных таблиц-картинок (word/media/*.wmf). Нужен каталог «Приложение Ж».');
-    const pages=[];
-    for(const n of names){ const t=GK.parseEmfTexts(await zip.files[n].async('arraybuffer')); if(t&&t.length) pages.push(t); }
-    if(!pages.length) throw new Error('Не удалось прочитать текст из картинок таблицы.');
-    return pages;
-  }
-
-  $('run').addEventListener('click',async()=>{
-    $('run').disabled=true;$('save').disabled=true;
-    try{
-      setStatus('Читаю DXF…');await tick();
-      const buf=await F.dxf.arrayBuffer();
-      const dec=GK.decodeText(buf);
-      const bad=(dec.text.match(/\uFFFD/g)||[]).length;
-      if(bad>50) throw new Error('В DXF '+bad+' символов-заменителей вместо букв: имена не восстановить. Выгрузите файл в UTF-8 заново.');
-      setStatus('Разбираю разрезы…');await tick();
-      const mt=GK.parseDxfMtexts(dec.text);
-      const ex=GK.extractSections(mt);
-      if(!ex.secs.length) throw new Error('В DXF нет подписей «Наименование:». Это не тот формат колонок.');
-      setStatus('Читаю каталог выработок…');await tick();
-      const pages=await readCatalog(F.doc);
-      const cat=GK.parseCatalog(pages);
-      if(!cat.rows.length) throw new Error('В каталоге не нашлось строк с координатами.');
-      setStatus('Читаю ось…');await tick();
-      const wb0=XLSX.read(await F.axis.arrayBuffer(),{type:'array'});
-      const axis=GK.parseAxis(XLSX.utils.sheet_to_json(wb0.Sheets[wb0.SheetNames[0]],{header:1}));
-      if(axis.length<2) throw new Error('В ведомости оси не нашлось строк ПК, X, Y.');
-      setStatus('Считаю фиктивные скважины…');await tick();
-      const opt={step:parseFloat($('o-step').value)||20,round:parseInt($('o-round').value,10),minT:parseFloat($('o-min').value)||0.1,elevFict:parseFloat($('o-elev').value)||0,prefix:$('o-prefix').value};
-      const res=GK.build(ex.secs,cat.rows,axis,opt);
-      result={res,ex,cat,dec};
-      render(result);
-      setStatus('Готово. Можно скачать Excel.');
-      $('save').disabled=false;
-    }catch(e){ console.error(e); setStatus(e.message||String(e),true); }
-    $('run').disabled=false;
-  });
-
-  function render(r){
-    const {res,ex,cat}=r, s=res.stats, c=res.checks;
-    const items=[[s.sections,'разрезов в DXF'],[s.realRows,'строк слоёв'],[s.uniquePk,'уникальных ПК'],[s.fictWells,'фиктивных скважин'],[s.fictRows,'строк фиктивных'],[s.maxGap.toFixed(2).replace('.',','),'макс. шаг, м'],[s.pkFrom+' – '+s.pkTo,'диапазон ПК']];
-    const st=$('stats');st.textContent='';
-    items.forEach(([v,l])=>{const d=document.createElement('div');d.className='stat';const b=document.createElement('b');b.textContent=v;const sp=document.createElement('span');sp.textContent=l;d.append(b,sp);st.appendChild(d)});
-    $('res').hidden=false;
-    const list=[
-      ['Предупреждения по разрезам DXF',ex.warns,ex.warns.length?'warn':'ok','Мощность взята из подписи слоя, глубины не использовались.'],
-      ['Скважины без строки в каталоге',c.noCatalog,c.noCatalog.length?'warn':'ok','Без X, Y и ПК, в расчёт расстояний не входят.'],
-      ['В каталоге нет ПК',c.noPk,c.noPk.length?'warn':'ok','X и Y есть, ПК нет.'],
-      ['Отметка устья 0,00 на чертеже',c.zeroElev,c.zeroElev.length?'warn':'ok','Оставлена как есть.'],
-      ['Отметка на чертеже и в каталоге различается',c.elevDiff.map(e=>e.name+': чертёж '+e.dxf+' / каталог '+e.cat),c.elevDiff.length?'warn':'ok','В таблице отметка с чертежа.'],
-      ['Дубли имён в каталоге',c.dupCatalog,c.dupCatalog.length?'bad':'ok',''],
-      ['Строки каталога не разобраны',cat.skipped,cat.skipped.length?'bad':'ok',''],
-      ['Фиктивные ПК вне оси или с ошибкой слоёв',c.axisWarn.concat(c.fictWarn),(c.axisWarn.length+c.fictWarn.length)?'bad':'ok','']
-    ];
-    const box=$('checks');box.textContent='';
-    list.forEach(([t,arr,cls,hint])=>{
-      const d=document.createElement('details');
-      const sm=document.createElement('summary');const a=document.createElement('span');a.textContent=t;const p=document.createElement('span');p.className='pill '+cls;p.textContent=arr.length?String(arr.length):'нет';sm.append(a,p);d.appendChild(sm);
-      if(arr.length||hint){const dt=document.createElement('div');dt.className='det';if(hint){const h=document.createElement('div');h.textContent=hint;dt.appendChild(h)}arr.slice(0,400).forEach(x=>{const e=document.createElement('div');e.textContent=x;dt.appendChild(e)});d.appendChild(dt)}
-      box.appendChild(d);
-    });
-    $('chk').hidden=false;
-    const tabs=$('tabs');tabs.hidden=false;tabs.textContent='';
-    const views=[['Единая таблица',res.unified,GK.HEADER],['Фиктивные скважины',res.fict,GK.HEADER],['ПК фиктивных',res.fictPk.map(x=>[x]),['ПК']]];
-    views.forEach(([n,rows,h],i)=>{
-      const b=document.createElement('button');b.textContent=n+' ('+rows.length+')';b.setAttribute('aria-pressed',i===0?'true':'false');
-      b.addEventListener('click',()=>{tabs.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed','false'));b.setAttribute('aria-pressed','true');table(h,rows,300);$('pv-n').textContent='Показаны первые 300 строк. В Excel попадут все.'});
-      tabs.appendChild(b);
-    });
-    $('pv-h').textContent='Результат';$('pv').classList.remove('sample');
-    table(GK.HEADER,res.unified,300);$('pv-n').textContent='Показаны первые 300 строк. В Excel попадут все.';
-  }
-
-  function buildWorkbook(r){
-    const {res,ex,cat}=r, c=res.checks;
-    const wb=XLSX.utils.book_new();
-    const add=(name,aoa,w)=>{const ws=XLSX.utils.aoa_to_sheet(aoa);ws['!cols']=w.map(x=>({wch:x}));XLSX.utils.book_append_sheet(wb,ws,name)};
-    add('Единая таблица',[GK.HEADER].concat(res.unified),[22,28,14,8,16,16,14]);
-    add('Фиктивные скважины',[GK.HEADER].concat(res.fict),[22,28,14,8,16,16,14]);
-    add('ПК фиктивных',[['ПК']].concat(res.fictPk.map(x=>[x])),[16]);
-    const chk=[['Проверка','Объект','Деталь']];
-    ex.warns.forEach(x=>chk.push(['Разрез DXF',x,'']));
-    c.noCatalog.forEach(x=>chk.push(['Нет в каталоге',x,'']));
-    c.noPk.forEach(x=>chk.push(['Нет ПК в каталоге',x,'']));
-    c.zeroElev.forEach(x=>chk.push(['Отметка 0,00 на чертеже',x,'']));
-    c.elevDiff.forEach(e=>chk.push(['Отметка чертёж/каталог',e.name,e.dxf+' / '+e.cat]));
-    c.dupCatalog.forEach(x=>chk.push(['Дубль в каталоге',x,'']));
-    cat.skipped.forEach(x=>chk.push(['Строка каталога не разобрана',x,'']));
-    add('Проверка',chk,[32,40,30]);
-    return XLSX.write(wb,{type:'array',bookType:'xlsx'});
-  }
-
-  $('save').addEventListener('click',async()=>{
-    if(!result) return;
-    try{
-      const buf=buildWorkbook(result);
-      const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
-      const dl=await (window.claude&&window.claude.use?window.claude.use('downloads'):null);
-      if(dl){ await dl.save({filename:'Колонки_с_фиктивными_скважинами.xlsx',data:blob}); }
-      else { const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='kolonki_s_fiktivnymi_skvazhinami.xlsx'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),4000); }
-      setStatus('Файл сохранён.');
-    }catch(e){ if(e&&e.code==='declined') setStatus('Сохранение отменено.'); else setStatus((e&&e.message)||'Не удалось сохранить файл.',true); }
-  });
+ }
+ const all=original.concat(fict).sort((a,b)=>a[0]-b[0]||a[1].localeCompare(b[1],'ru'));
+ return {all,original,fict,warnings,comparison,stats:{wells:wells.length,fict:seq,layers:fict.length,maxGap:fmt(maxGap),pairs:comparison.length}};
+}
+function showTable(head,rows){
+ const table=$('pv');table.tHead.textContent='';table.tBodies[0].textContent='';
+ const tr=document.createElement('tr');for(const h of head){const th=document.createElement('th');th.textContent=h;tr.appendChild(th)}table.tHead.appendChild(tr);
+ for(const row of rows.slice(0,300)){const tr=document.createElement('tr');for(const v of row){const td=document.createElement('td');td.textContent=v??'';tr.appendChild(td)}table.tBodies[0].appendChild(tr)}
+}
+function render(r){
+ $('res').hidden=false;$('chk').hidden=false;$('tabs').hidden=false;
+ const stats=[['Исходных скважин',r.stats.wells],['Фиктивных скважин',r.stats.fict],['Строк фиктивных слоёв',r.stats.layers],['Макс. шаг, м',r.stats.maxGap],['Пар соседних ПК',r.stats.pairs]];
+ $('stats').textContent='';for(const [name,v] of stats){const div=document.createElement('div');div.className='stat';const b=document.createElement('b');b.textContent=v;const sp=document.createElement('span');sp.textContent=name;div.append(b,sp);$('stats').appendChild(div)}
+ $('checks').textContent='';const d=document.createElement('details'),sm=document.createElement('summary');sm.textContent='Предупреждения: '+r.warnings.length;d.appendChild(sm);const body=document.createElement('div');body.className='det';for(const x of r.warnings){const el=document.createElement('div');el.textContent=x;body.appendChild(el)}d.appendChild(body);$('checks').appendChild(d);
+ const views=[['Общая ведомость',HEAD,r.all],['Фиктивные',HEAD,r.fict],['Исходные',HEAD,r.original],['Сопоставление', ['Скважина А','Скважина Б','ПК А','ПК Б','Слоёв А','Слоёв Б','Фиктивных'],r.comparison]];
+ $('tabs').textContent='';views.forEach(([name,head,rows],i)=>{const b=document.createElement('button');b.textContent=name+' ('+rows.length+')';b.setAttribute('aria-pressed',i===0?'true':'false');b.addEventListener('click',()=>{for(const x of $('tabs').children)x.setAttribute('aria-pressed','false');b.setAttribute('aria-pressed','true');showTable(head,rows)});$('tabs').appendChild(b)});
+ showTable(HEAD,r.all);$('pv-n').textContent='Показаны первые 300 строк; в Excel сохраняются все.';
+}
+$('run').addEventListener('click',async()=>{
+ $('run').disabled=true;$('save').disabled=true;
+ try{
+  const step=num($('o-step').value),round=Number($('o-round').value);
+  if(!Number.isFinite(step)||step<=0)throw Error('Шаг должен быть больше нуля');
+  status('Чтение Excel...');
+  const [w,a]=await Promise.all([read(F.wells),read(F.axis)]),warnings=[];
+  const wells=parseWells(w,warnings),axis=parseAxis(a);
+  status('Расчёт...');
+  result=calc(wells,axis,step,round,$('o-prefix').value);
+  result.warnings.unshift(...warnings);
+  render(result);$('save').disabled=false;status('Готово. Проверьте предупреждения и скачайте Excel.');
+ }catch(e){status(e.message||String(e),true);console.error(e)}
+ $('run').disabled=false;
+});
+$('save').addEventListener('click',()=>{
+ if(!result)return;
+ try{
+  const wb=XLSX.utils.book_new();
+  const add=(name,head,rows)=>{const sh=XLSX.utils.aoa_to_sheet([head,...rows]);sh['!cols']=head.map(()=>({wch:22}));XLSX.utils.book_append_sheet(wb,sh,name)};
+  add('Результат',HEAD,$('o-export').value==='fict'?result.fict:result.all);
+  add('Фиктивные',HEAD,result.fict);
+  add('Сопоставление',['Скважина А','Скважина Б','ПК А','ПК Б','Слоёв А','Слоёв Б','Фиктивных'],result.comparison);
+  add('Проверки',['Предупреждение'],result.warnings.map(x=>[x]));
+  XLSX.writeFile(wb,'Колонки_фиктивные_скважины.xlsx');status('Excel сформирован.');
+ }catch(e){status('Ошибка выгрузки: '+e.message,true)}
+});
 })();
 </script>
 </body></html>
