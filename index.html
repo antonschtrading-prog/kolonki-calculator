@@ -501,10 +501,13 @@ async function read(file){const wb=XLSX.read(await file.arrayBuffer(),{type:'arr
 function parseWells(rows,warnings){
  const header=rows.findIndex(r=>r.some(v=>/наименование/i.test(String(v)))&&r.some(v=>/мощност/i.test(String(v))));
  if(header<0)throw Error('В ведомости скважин не найдены заголовки «Наименование» и «Мощность».');
- const h=rows[header].map(x=>String(x).toLowerCase().replace(/\s/g,''));
+ // Нормализация смешанных кириллических/латинских символов и служебных знаков Excel.
+ const h=rows[header].map(x=>String(x??'').toLowerCase().replace(/ё/g,'е').replace(/[\s.,:;_()\-]+/g,'').replace(/к/g,'k').replace(/х/g,'x').replace(/у/g,'y'));
  const col=(re)=>h.findIndex(x=>re.test(x));
- const idx={p:col(/^пк$|пикетаж/),n:col(/наименование/),x:col(/^(координата)?x/),y:col(/^(координата)?y/),z:col(/^z$|абсолютнаяотметка|абс\.отм/),t:col(/мощност/),g:col(/игэ|гиэ/)};
- if(Object.values(idx).some(x=>x<0))throw Error('Не хватает столбцов: ПК, Наименование, X, Y, Z, Мощность, ИГЭ.');
+ const idx={p:col(/^пk$|^pk$|^пk\d*$|пикетаж|пикет/),n:col(/наименование|названиесkважины|номерсkважины/),x:col(/^(kоордината|координата)?x(?:м|метр|$)/),y:col(/^(kоордината|координата)?y(?:м|метр|$)/),z:col(/^z$|отметkаустья|абсолютнаяотметkа|абсотм/),t:col(/мощност/),g:col(/игэ|гиэ/)};
+ const names={p:'ПК',n:'Наименование',x:'X',y:'Y',z:'Z',t:'Мощность',g:'ИГЭ'};
+ const missing=Object.keys(idx).filter(k=>idx[k]<0).map(k=>names[k]);
+ if(missing.length)throw Error('Не найдены столбцы: '+missing.join(', ')+'. Заголовки файла: '+rows[header].map(v=>String(v)).join(' | '));
  const groups=new Map();
  for(let i=header+1;i<rows.length;i++){
   const r=rows[i];if(r.every(x=>x===''||x===null))continue;
