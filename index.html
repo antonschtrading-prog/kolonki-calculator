@@ -669,8 +669,8 @@ $('dxf-export').addEventListener('click',()=>{
    }
   }
   tx(cols[0].x,Math.max(...cols.map(w=>Y(w.z)))+15,'ГЕОЛОГИЧЕСКИЙ ПРОФИЛЬ   Г 1:5000   В 1:100',3,'ЗАГОЛОВОК');
-  const dxf=['0','SECTION','2','HEADER','9','$ACADVER','1','AC1009','0','ENDSEC','0','SECTION','2','ENTITIES',...e,'0','ENDSEC','0','EOF'].join('\r\n')+'\r\n';
-  const blob=new Blob(['\uFEFF',dxf],{type:'application/dxf'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+  const dxf=['0','SECTION','2','HEADER','9','$ACADVER','1','AC1021','0','ENDSEC','0','SECTION','2','ENTITIES',...e,'0','ENDSEC','0','EOF'].join('\r\n')+'\r\n';
+  const blob=new Blob([dxf],{type:'application/dxf'}),url=URL.createObjectURL(blob),a=document.createElement('a');
   a.href=url;a.download='Геология_Г5000_В100.dxf';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000);
   status('DXF сформирован: геология, исходные и фиктивные скважины, границы ИГЭ. Участки с несовпадающими ИГЭ требуют проверки.');
  }catch(err){status('Ошибка DXF: '+err.message,true)}
