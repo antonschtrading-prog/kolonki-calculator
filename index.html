@@ -526,9 +526,9 @@ function parseGround(rows){
  const norm=v=>String(v??'').toLowerCase().replace(/ё/g,'е').replace(/[\s.,:;_()\-]+/g,'');
  let header=-1,ip=-1,iz=-1;
  for(let i=0;i<Math.min(rows.length,35);i++){
-  const h=rows[i].map(norm);
-  const p=h.findIndex(v=>/^(пк|пk|pk|пикет|пикетаж)$/.test(v));
-  const z=h.findIndex((v,j)=>j!==p&&(/отметк|высот|^z$|^h$|^нземли$|^земля$|^абсотм/.test(v)));
+  const h=rows[i].map((v,j)=>norm(v)+' '+norm(rows[i+1]?.[j]));
+  const p=h.findIndex(v=>/^(пк|пk|pk|пикет|пикетаж)\+?(?:\s|$)/.test(v));
+  const z=h.findIndex((v,j)=>j!==p&&(/отметк|высот|^z(?:\s|$)|^h(?:\s|$)|земли|земля|абсотм/.test(v)));
   if(p>=0&&z>=0){header=i;ip=p;iz=z;break}
  }
  if(header<0)throw Error('Ведомость земли: нужны заголовки «ПК» и «Отметка земли» (Z/H).');
