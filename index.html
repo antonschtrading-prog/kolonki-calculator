@@ -639,7 +639,7 @@ $('run').addEventListener('click',async()=>{
  }catch(e){status(e.message||String(e),true);console.error(e)}
  $('run').disabled=false;
 });
-// Геология в масштабе Г 1:5000, В 1:100. R12 ASCII для совместимости с AutoCAD 2020.
+// Геология: горизонталь 1:5000, линия земли вертикаль 1:500, мощность грунтов вертикаль 1:100. R12 ASCII для совместимости с AutoCAD 2020.
 $('dxf-export').addEventListener('click',()=>{
  if(!result||!result.ground)return;
  try{
@@ -654,9 +654,10 @@ $('dxf-export').addEventListener('click',()=>{
   const missing=wells.filter(w=>!Number.isFinite(groundZ(result.ground,w.pk)));
   if(missing.length)throw Error('Отметки земли отсутствуют для '+missing.length+' скважин. Проверьте диапазон ПК ведомости.');
   const startPk=wells[0].pk;
-  const bottom=Math.min(...wells.map(w=>groundZ(result.ground,w.pk)-w.layers.reduce((s,l)=>s+l.t,0)));
-  const base=Math.floor(bottom)-3;
-  const X=p=>(p-startPk)/5,Y=z=>(z-base)*10;
+  const base=Math.floor(Math.min(...wells.map(w=>groundZ(result.ground,w.pk))))-3;
+  const X=p=>(p-startPk)/5;
+  const groundY=z=>(z-base)*2; // 1:500 — 2 мм на метр
+  const geoY=(earth,depth)=>groundY(earth)-depth*10; // 1:100 — 10 мм на метр
   const lines=[],add=(c,v)=>lines.push(String(c),String(v));
   const latin=t=>String(t).replace(/[а-яё]/gi,ch=>{const d={а:'a',б:'b',в:'v',г:'g',д:'d',е:'e',ё:'e',ж:'zh',з:'z',и:'i',й:'y',к:'k',л:'L',м:'m',н:'n',о:'o',п:'p',р:'r',с:'s',т:'t',у:'u',ф:'f',х:'h',ц:'ts',ч:'ch',ш:'sh',щ:'sch',ъ:'',ы:'y',ь:'',э:'e',ю:'yu',я:'ya'};const z=d[ch.toLowerCase()]||'_';return ch===ch.toUpperCase()?z.toUpperCase():z}).replace(/[^\x20-\x7E]/g,'_');
   const layer=t=>latin(t).replace(/[^A-Za-z0-9_-]/g,'_').slice(0,45)||'GEO';
@@ -664,7 +665,7 @@ $('dxf-export').addEventListener('click',()=>{
   const tx=(x,y,t,h,l)=>{if(![x,y,h].every(Number.isFinite))return;add(0,'TEXT');add(8,layer(l));add(10,x.toFixed(4));add(20,y.toFixed(4));add(40,h);add(1,latin(t));add(7,'STANDARD')};
   const fill=(x1,t1,b1,x2,t2,b2,code)=>{if(Math.max(t1-b1,t2-b2)<0.00001)return;
    add(0,'SOLID');add(8,'IGE_'+layer(code));add(62,9);
-   for(const [i,p] of [[x1,Y(t1)],[x2,Y(t2)],[x1,Y(b1)],[x2,Y(b2)]].entries()){add(10+i,p[0].toFixed(4));add(20+i,p[1].toFixed(4))}
+   for(const [i,p] of [[x1,t1],[x2,t2],[x1,b1],[x2,b2]].entries()){add(10+i,p[0].toFixed(4));add(20+i,p[1].toFixed(4))}
   };
   const cols=wells.map(w=>({ ...w,earth:groundZ(result.ground,w.pk),x:X(w.pk)}));
   // Сопоставляем слои по кодам с сохранением последовательности.
@@ -692,13 +693,15 @@ $('dxf-export').addEventListener('click',()=>{
    });
    for(let q=0;q<2;q++){
     const l=profiles[q],rr=profiles[q+1];
-    ln(l.x,Y(l.earth),rr.x,Y(rr.earth),'GROUND');
+    ln(l.x,groundY(l.earth),rr.x,groundY(rr.earth),'GROUND');
     for(let j=0;j<pp.length;j++){
      const p=l.layers[j],v=rr.layers[j];
      if(p.t<=0&&v.t<=0)continue;
-     fill(l.x,p.top,p.bottom,rr.x,v.top,v.bottom,p.g);
-     ln(l.x,Y(p.top),rr.x,Y(v.top),'BOUNDARIES');
-     ln(l.x,Y(p.bottom),rr.x,Y(v.bottom),'BOUNDARIES');
+     const pTop=geoY(l.earth,l.earth-p.top),pBottom=geoY(l.earth,l.earth-p.bottom);
+     const vTop=geoY(rr.earth,rr.earth-v.top),vBottom=geoY(rr.earth,rr.earth-v.bottom);
+     fill(l.x,pTop,pBottom,rr.x,vTop,vBottom,p.g);
+     ln(l.x,pTop,rr.x,vTop,'BOUNDARIES');
+     ln(l.x,pBottom,rr.x,vBottom,'BOUNDARIES');
 
     }
    }
@@ -709,25 +712,25 @@ $('dxf-export').addEventListener('click',()=>{
     let depth=0;
     for(let h=0;h<j;h++){const v=pp[h];depth+=v.a&&v.b?v.a+(v.b-v.a)*f:v.a?v.a*Math.max(0,1-2*f):v.b*Math.max(0,2*f-1)}
     const v=pp[j],th=v.a&&v.b?v.a+(v.b-v.a)*f:v.a?v.a*Math.max(0,1-2*f):v.b*Math.max(0,2*f-1);
-    if(th>=0.35)tx(X(p),Y(earth-depth-th/2),v.g,2,'IGE_CODES');
+    if(th>=0.35)tx(X(p),geoY(earth,depth+th/2),v.g,2,'IGE_CODES');
    }
   }
   let lastNamePk=-Infinity;
   for(const w of cols){
-   const x=w.x,top=Y(w.earth),total=w.layers.reduce((s,l)=>s+l.t,0);
-   ln(x,top,x,Y(w.earth-total),w.synthetic?'SYNTH_WELLS':'ORIG_WELLS');
+   const x=w.x,top=groundY(w.earth),total=w.layers.reduce((s,l)=>s+l.t,0);
+   ln(x,top,x,geoY(w.earth,total),w.synthetic?'SYNTH_WELLS':'ORIG_WELLS');
    let depth=0;
    for(const l of w.layers){
     depth+=l.t;
-    ln(x-0.7,Y(w.earth-depth),x+0.7,Y(w.earth-depth),'LAYER_DEPTHS');
-    if(!w.synthetic)tx(x+0.9,Y(w.earth-depth),depth.toFixed(2),1.4,'DEPTH_LABELS');
+    ln(x-0.7,geoY(w.earth,depth),x+0.7,geoY(w.earth,depth),'LAYER_DEPTHS');
+    if(!w.synthetic)tx(x+0.9,geoY(w.earth,depth),depth.toFixed(2),1.4,'DEPTH_LABELS');
    }
    if(!w.synthetic&&w.pk-lastNamePk>=100-1e-8){
     tx(x+1.2,top+4,w.name,2.3,'WELL_NAMES');
     lastNamePk=w.pk;
    }
   }
-  tx(cols[0].x,Math.max(...cols.map(w=>Y(w.earth)))+16,'GEOLOGICAL SECTION  H 1:5000  V 1:100',3,'TITLE');
+  tx(cols[0].x,Math.max(...cols.map(w=>groundY(w.earth)))+16,'GEOLOGY H 1:5000  GROUND V 1:500  SOILS V 1:100',3,'TITLE');
   // Старый ASCII DXF: только простые LINE, SOLID, TEXT без повреждённых таблиц и UTF-8.
   const dxf=['0','SECTION','2','HEADER','9','$ACADVER','1','AC1009','0','ENDSEC','0','SECTION','2','ENTITIES',...lines,'0','ENDSEC','0','EOF'].join('\r\n')+'\r\n';
   const blob=new Blob([dxf],{type:'application/dxf;charset=us-ascii'}),url=URL.createObjectURL(blob),a=document.createElement('a');
