@@ -837,6 +837,27 @@ $('save').addEventListener('click',()=>{
 
  function topologyIGE(geo,columns){
   const seg=geo.segments.filter(e=>/ГЕОЛОГИЯ/i.test(e.layer)&&Math.abs(e.x2-e.x1)>0.08&&Math.hypot(e.x2-e.x1,e.y2-e.y1)>4.5);
+  // Соединяем свободные концы геологических границ с ближайшей засечкой колонки.
+  // Эти мосты применяются только для прослеживания ИГЭ, а не для определения глубин.
+  const counts=new Map();
+  const key=(x,y)=>x.toFixed(2)+','+y.toFixed(2);
+  for(const e of seg)for(const p of [[e.x1,e.y1],[e.x2,e.y2]])counts.set(key(...p),(counts.get(key(...p))||0)+1);
+  const bridges=[];
+  for(const e of seg)for(const p of [[e.x1,e.y1],[e.x2,e.y2]]){
+   if(counts.get(key(...p))!==1)continue;
+   let best=null;
+   for(const c of columns)for(const x of [c.x-1,c.x+1]){
+    if(Math.abs(x-p[0])>12)continue;
+    for(const y of [...c.levels,c.top,c.bottom]){
+     if(Math.abs(y-p[1])>0.6)continue;
+     const d=Math.hypot(x-p[0],y-p[1]);
+     if(d<0.08||best&&d>=best.d)continue;
+     best={x,y,d};
+    }
+   }
+   if(best)bridges.push({x1:p[0],y1:p[1],x2:best.x,y2:best.y});
+  }
+  seg.push(...bridges);
   const nodes=[],adj=[],edges=[];
   function node(x,y){let i=nodes.findIndex(n=>Math.hypot(n.x-x,n.y-y)<0.08);if(i<0){i=nodes.length;nodes.push({x,y});adj.push([])}return i}
   for(const e of seg){const a=node(e.x1,e.y1),b=node(e.x2,e.y2),d=Math.hypot(e.x2-e.x1,e.y2-e.y1);adj[a].push([b,d]);adj[b].push([a,d]);edges.push([a,b])}
