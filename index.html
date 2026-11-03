@@ -1014,13 +1014,15 @@ $('save').addEventListener('click',()=>{
      if(rejected.length)flags.push('Есть отклонённые подписи глубин');
      if(x===null)flags.push('ПК вне ведомости координат');
      diagnostic[diagnostic.length-1].depths++;
+     if(distinct.length>1)diagnostic[diagnostic.length-1].ambiguous=(diagnostic[diagnostic.length-1].ambiguous||0)+1;
+     if(!distinct.length)diagnostic[diagnostic.length-1].missing=(diagnostic[diagnostic.length-1].missing||0)+1;
      data.push({pk:pkLabel(p),name,depth:item.depth.toFixed(2),ige:code,x:x===null?'':x.toFixed(3),y:y===null?'':y.toFixed(3),check:flags.join('; ')||'ИГЭ по двум границам'});
     }
    }
    window.__exDiagnostics=diagnostic;
    render();$('ex-save').disabled=false;
    const unnamed=names.filter((n,i)=>n==='Скв. '+(i+1)).length;
-   showStatus('Графических колонок: '+columns.length+' (ожидалось 97); без надёжного названия: '+unnamed+'. Первая: '+names[0]+' = '+pkLabel(start)+'. Неоднозначных ИГЭ: '+ambiguous+', без ИГЭ: '+missing+'. Колонки не удалены автоматически.');
+   showStatus('Графических колонок: '+columns.length+' (контрольный файл: 98); без надёжного названия: '+unnamed+'. Первая: '+names[0]+' = '+pkLabel(start)+'. Неоднозначных ИГЭ: '+ambiguous+', без ИГЭ: '+missing+'. Колонки не удалены автоматически.');
   }catch(e){showStatus(e.message||String(e),true);console.error(e)}
  };
  $('ex-save').onclick=()=>{
@@ -1031,8 +1033,8 @@ $('save').addEventListener('click',()=>{
   ws['!cols']=[15,26,25,15,19,19,32].map(wch=>({wch}));
   XLSX.utils.book_append_sheet(wb,ws,'Извлечённые скважины');
   const diag=window.__exDiagnostics||[];
-  const audit=XLSX.utils.aoa_to_sheet([['№ колонки','ПК','Название','X в DXF','Засечек','Подписей глубин','Отклонённые подписи','Проверка'],...diag.map(d=>[d.index,d.pk,d.name,d.x,d.ticks,d.depths,d.rejected,d.depths===0?'Нет подписей глубин':d.name==='Скв. '+d.index?'Не установлено название':''])]);
-  audit['!cols']=[12,15,25,20,14,20,50,30].map(wch=>({wch}));
+  const audit=XLSX.utils.aoa_to_sheet([['№ колонки','ПК','Название','X в DXF','Засечек','Подписей глубин','Отклонённые подписи','Неоднозначных ИГЭ','Без ИГЭ','Проверка'],...diag.map(d=>[d.index,d.pk,d.name,d.x,d.ticks,d.depths,d.rejected,d.ambiguous||0,d.missing||0,d.depths===0?'Нет подписей глубин':d.name==='Скв. '+d.index?'Не установлено название':''])]);
+  audit['!cols']=[12,15,25,20,14,20,50,20,20,30].map(wch=>({wch}));
   XLSX.utils.book_append_sheet(wb,audit,'Контроль колонок');
   XLSX.writeFile(wb,'Геология_из_DXF_проверить.xlsx');
  };
