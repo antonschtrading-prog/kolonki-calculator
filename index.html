@@ -83,6 +83,8 @@ th{position:sticky;top:0;background:var(--soft);font-family:var(--font);font-wei
 
 </head><body>
 <main>
+<nav style="display:flex;gap:10px;flex-wrap:wrap"><button type="button" id="tab-build">Построение геологии</button><button type="button" class="alt" id="tab-extract">Извлечение из DXF</button></nav>
+<div id="build-panel" style="display:contents">
 <header><h1>Расчёт колонок и фиктивных скважин</h1><p class="lead">Расчёт по трём ведомостям Excel без DXF и Word. Сопоставляются только соседние исходные скважины по ПК.</p></header>
 <section><h2>Исходные Excel-файлы</h2><div class="files">
 <label class="drop" id="d-wells"><input type="file" id="f-wells" accept=".xlsx,.xls"><span class="t">Ведомость скважин</span><span class="h">ПК, Наименование, X, Y, Z, Мощность, ИГЭ (или ГИЭ)</span><span class="f" id="n-wells">Не выбран</span></label>
@@ -100,6 +102,10 @@ th{position:sticky;top:0;background:var(--soft);font-family:var(--font);font-wei
 <section id="chk" hidden><h2>Проверки</h2><div class="checks" id="checks"></div></section>
 <section><h2 id="pv-h">Предпросмотр ведомости</h2><div class="tabs" id="tabs" hidden></div><div class="tw"><table id="pv"><thead></thead><tbody></tbody></table></div><p class="note" id="pv-n">После расчёта здесь появятся результаты.</p></section>
 <p class="note"><b>Методика.</b> Между соседними исходными ПК создаётся минимальное число равных промежутков не длиннее заданного шага. При равном числе слоёв интерполируются мощности по порядку. При разном числе отсутствующие слои выклиниваются к середине интервала. Отметки Z фиктивных скважин линейно интерполируются между исходными по ПК. Неоднозначные ИГЭ помечаются для проверки.</p>
+</div>
+<div id="extract-panel" hidden>
+<section><h2>Извлечение скважин из DXF</h2><p class="note">Загрузите разрез и ведомость координат оси. Укажите ПК первой скважины слева и масштабы исходного чертежа. Результат проверьте в таблице перед экспортом.</p><div class="files"><label class="drop">Геологический DXF<input type="file" id="ex-dxf" accept=".dxf"></label><label class="drop">Ведомость координат оси (Excel)<input type="file" id="ex-axis" accept=".xlsx,.xls"></label></div><div class="opts"><label class="o">ПК первой скважины<input id="ex-start" value="1+00" placeholder="1+00"></label><label class="o">Горизонтальный масштаб<select id="ex-h"></select></label><label class="o">Вертикальный масштаб земли<select id="ex-earth"></select></label><label class="o">Вертикальный масштаб грунтов<select id="ex-soil"></select></label></div><div class="bar"><button id="ex-run">Распознать скважины</button><button class="alt" id="ex-save" disabled>Скачать Excel</button><span class="status" id="ex-status">Загрузите DXF и ведомость оси.</span></div><p class="note">ПК рассчитывается по горизонтальному расстоянию между скважинами от первой скважины. Для нестандартных блоков и неоднозначных границ результаты требуют проверки.</p><div class="tw"><table id="ex-table"><thead><tr><th>ПК</th><th>Наименование</th><th>Глубина подошвы, м</th><th>ИГЭ</th><th>X</th><th>Y</th><th>Проверка</th></tr></thead><tbody></tbody></table></div></section>
+</div>
 </main>
 
 <script>
@@ -753,6 +759,109 @@ $('save').addEventListener('click',()=>{
   XLSX.writeFile(wb,'Колонки_фиктивные_скважины.xlsx');status('Excel сформирован.');
  }catch(e){status('Ошибка выгрузки: '+e.message,true)}
 });
+})();
+</script>
+<script>
+(function(){
+ const $=id=>document.getElementById(id),scales=[100,500,1000,2000,5000];
+ for(const [id,val] of [['ex-h',5000],['ex-earth',500],['ex-soil',100]]){
+  $(id).innerHTML=scales.map(n=>'<option value="'+n+'" '+(n===val?'selected':'')+'>1:'+n+'</option>').join('');
+ }
+ const build=$('build-panel'),extract=$('extract-panel');
+ $('tab-build').onclick=()=>{build.style.display='contents';extract.hidden=true;$('tab-build').classList.remove('alt');$('tab-extract').classList.add('alt')};
+ $('tab-extract').onclick=()=>{build.style.display='none';extract.hidden=false;$('tab-build').classList.add('alt');$('tab-extract').classList.remove('alt')};
+ let data=[];
+ const num=v=>Number(String(v??'').trim().replace(',','.'));
+ const parsePk=v=>{const m=String(v??'').trim().match(/^(\d+)\+(\d+(?:[.,]\d+)?)$/);return m?Number(m[1])*100+num(m[2]):num(v)};
+ const pkLabel=p=>{const a=Math.floor(p/100),b=(p-a*100).toFixed(2).padStart(5,'0');return a+'+'+b};
+ const showStatus=(s,bad=false)=>{$('ex-status').textContent=s;$('ex-status').classList.toggle('err',bad)};
+ function parseDXF(content){
+  const lines=content.replace(/\r/g,'').split('\n'),out=[];let entity=null,section='';
+  function flush(){if(entity&&entity.type==='TEXT'&&Number.isFinite(entity.x)&&Number.isFinite(entity.y)&&entity.text)out.push(entity);entity=null}
+  for(let i=0;i+1<lines.length;i+=2){
+   const code=lines[i].trim(),value=lines[i+1];
+   if(code==='0'){flush();if(value.trim()==='TEXT')entity={type:'TEXT',text:'',x:NaN,y:NaN};continue}
+   if(!entity)continue;
+   if(code==='1')entity.text=value.trim();
+   if(code==='10')entity.x=num(value);
+   if(code==='20')entity.y=num(value);
+  }
+  flush();return out;
+ }
+ function axisPoints(rows){
+  let head=-1,pi=-1,xi=-1,yi=-1;
+  for(let i=0;i<Math.min(35,rows.length);i++){
+   const h=rows[i].map(v=>String(v??'').toLowerCase().replace(/[\s.,:;()_-]/g,'').replace(/к/g,'k').replace(/х/g,'x').replace(/у/g,'y'));
+   const p=h.findIndex(v=>/^(пk|pk|пикетаж|пикет)/.test(v));
+   const x=h.findIndex(v=>/^(kоордината|координата)?x/.test(v)),y=h.findIndex(v=>/^(kоордината|координата)?y/.test(v));
+   if(p>=0&&x>=0&&y>=0){head=i;pi=p;xi=x;yi=y;break}
+  }
+  if(head<0)throw Error('Ведомость оси: не найдены столбцы ПК, X, Y.');
+  const pts=rows.slice(head+1).map(r=>[parsePk(r[pi]),num(r[xi]),num(r[yi])]).filter(a=>a.every(Number.isFinite)).sort((a,b)=>a[0]-b[0]);
+  if(pts.length<2)throw Error('Ведомость оси: нужны хотя бы две точки.');
+  return pts;
+ }
+ function xyAt(pts,p){
+  if(p<pts[0][0]||p>pts[pts.length-1][0])return [null,null];
+  let i=0;while(i<pts.length-2&&pts[i+1][0]<p)i++;
+  const a=pts[i],b=pts[i+1],f=(p-a[0])/(b[0]-a[0]);
+  return [a[1]+(b[1]-a[1])*f,a[2]+(b[2]-a[2])*f];
+ }
+ const nameRe=/(?:скв\.?|скважин)[\s._-]*[\wа-яё.-]+/i;
+ function render(){
+  const body=$('ex-table').tBodies[0];body.textContent='';
+  for(let i=0;i<data.length;i++){
+   const r=data[i],tr=body.insertRow();
+   for(const k of ['pk','name','depth','ige','x','y']){
+    const td=tr.insertCell(),inp=document.createElement('input');inp.value=r[k]??'';inp.style.cssText='width:115px;min-width:75px;padding:5px';inp.onchange=()=>{r[k]=inp.value};td.appendChild(inp);
+   }
+   tr.insertCell().textContent=r.check;
+  }
+ }
+ $('ex-run').onclick=async()=>{
+  try{
+   const dxf=$('ex-dxf').files[0],axis=$('ex-axis').files[0];
+   if(!dxf||!axis)throw Error('Нужно выбрать DXF и ведомость координат оси.');
+   const start=parsePk($('ex-start').value);if(!Number.isFinite(start))throw Error('Укажите ПК первой скважины, например 1+00.');
+   showStatus('Чтение DXF...');
+   const bytes=await dxf.arrayBuffer();
+   let content=new TextDecoder('utf-8').decode(bytes);
+   if(content.includes('\uFFFD'))content=new TextDecoder('windows-1251').decode(bytes);
+   const texts=parseDXF(content);
+   const wells=texts.filter(t=>nameRe.test(t.text)).sort((a,b)=>a.x-b.x);
+   if(!wells.length)throw Error('В DXF не обнаружены подписи скважин TEXT. Проверьте, что блоки разбиты.');
+   const wb=XLSX.read(await axis.arrayBuffer(),{type:'array'});
+   const pts=axisPoints(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:''}));
+   const h=Number($('ex-h').value),vs=Number($('ex-soil').value),factor=h/1000;
+   const x0=wells[0].x;
+   data=[];
+   for(const w of wells){
+    const p=start+(w.x-x0)*factor,[x,y]=xyAt(pts,p);
+    // Числа возле каждой скважины — кандидаты глубин; код ИГЭ пока только с ручным подтверждением.
+    const near=texts.filter(t=>t!==w&&Math.abs(t.x-w.x)<18&&t.y<w.y&&/^(\d+[.,]\d+)$/.test(t.text)&&num(t.text)>0&&num(t.text)<80).sort((a,b)=>b.y-a.y);
+    const depths=[];
+    for(const t of near){
+     const d=num(t.text);if(!depths.some(v=>Math.abs(v-d)<0.05))depths.push(d);
+    }
+    depths.sort((a,b)=>a-b);
+    if(!depths.length)depths.push(null);
+    for(const d of depths){
+     data.push({pk:pkLabel(p),name:w.text,depth:d===null?'':d.toFixed(2),ige:'',x:x===null?'':x.toFixed(3),y:y===null?'':y.toFixed(3),check:'Проверить глубину и ИГЭ'});
+    }
+   }
+   render();$('ex-save').disabled=false;
+   showStatus('Найдено '+wells.length+' подписей скважин, '+data.length+' строк. Глубины предварительные; ИГЭ требуют проверки.');
+  }catch(e){showStatus(e.message||String(e),true);console.error(e)}
+ };
+ $('ex-save').onclick=()=>{
+  if(!data.length)return;
+  const header=['ПК','Наименование скважины','Глубина подошвы слоя, м','Код ИГЭ','X','Y','Проверка'];
+  const rows=data.map(r=>[r.pk,r.name,r.depth,r.ige,r.x,r.y,r.check]);
+  const wb=XLSX.utils.book_new(),ws=XLSX.utils.aoa_to_sheet([header,...rows]);
+  ws['!cols']=[15,26,25,15,19,19,32].map(wch=>({wch}));
+  XLSX.utils.book_append_sheet(wb,ws,'Извлечённые скважины');
+  XLSX.writeFile(wb,'Геология_из_DXF_проверить.xlsx');
+ };
 })();
 </script>
 </body></html>
