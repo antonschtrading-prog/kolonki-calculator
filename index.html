@@ -989,14 +989,28 @@ $('save').addEventListener('click',()=>{
     const bounds=[w.top,...accepted.map(z=>w.top-z.depth*1000/Number($('ex-soil').value))];
     const prev=columns[i-1],nextCol=columns[i+1];
     const nearby=circleCodes.filter(o=>(prev&&o.x>prev.x+1&&o.x<w.x-1)||(nextCol&&o.x>w.x+1&&o.x<nextCol.x-1));
+    // Вычисляем топологическую привязку каждого кружка один раз на колонку.
+    // При отсутствии связи с границей используем вертикальное положение как
+    // диагностическую подсказку, не как подтверждённую топологию.
+    const matches=nearby.map(o=>{
+     const z=topo(o,i,bounds);
+     let vertical=-1;
+     if(!z)for(let k=0;k<bounds.length-1;k++)
+      if(o.y<=bounds[k]+0.65&&o.y>=bounds[k+1]-0.65){vertical=k;break}
+     return {code:o.code,z,vertical};
+    });
     for(let j=0;j<accepted.length;j++){
-     const item=accepted[j],strong=[],weak=[];
-     for(const o of nearby){const z=topo(o,i,bounds);if(z&&z.j===j)(z.quality==='both'?strong:weak).push(o.code)}
-     const candidates=strong.length?strong:weak,distinct=[...new Set(candidates)],flags=[];
+     const item=accepted[j],strong=[],weak=[],vertical=[];
+     for(const m of matches){
+      if(m.z&&m.z.j===j)(m.z.quality==='both'?strong:weak).push(m.code);
+      else if(!m.z&&m.vertical===j)vertical.push(m.code);
+     }
+     const candidates=strong.length?strong:weak.length?weak:vertical,distinct=[...new Set(candidates)],flags=[];
      const code=distinct.length===1?distinct[0]:'';
      if(distinct.length>1){ambiguous++;flags.push('Неоднозначный ИГЭ: '+distinct.join('/'))}
      if(!distinct.length){missing++;flags.push('ИГЭ не найден')}
      if(!strong.length&&weak.length)flags.push('Привязка ИГЭ по одной границе; проверить');
+     if(!strong.length&&!weak.length&&vertical.length)flags.push('ИГЭ только по вертикальному положению; проверить');
      if(rejected.length)flags.push('Есть отклонённые подписи глубин');
      if(x===null)flags.push('ПК вне ведомости координат');
      diagnostic[diagnostic.length-1].depths++;
