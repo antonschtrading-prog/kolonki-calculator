@@ -496,7 +496,7 @@ const fmt=v=>Number(v.toFixed(6));
 function pk(v){if(typeof v==='number')return v;const s=String(v??'').trim();const m=s.match(/^(\d+)\+(\d+(?:[.,]\d+)?)$/);return m?Number(m[1])*100+num(m[2]):num(s)}
 function status(t,error=false){$('status').textContent=t;$('status').classList.toggle('err',error)}
 function bind(k){const el=$('f-'+k),box=$('d-'+k);function set(f){if(!f)return;F[k]=f;$('n-'+k).textContent=f.name;box.classList.add('ready');$('run').disabled=!(F.wells&&F.axis&&F.ground);status(F.wells&&F.axis?'Файлы выбраны. Нажмите «Рассчитать».':'Выберите все три файла.')}el.addEventListener('change',()=>set(el.files[0]));['dragover','dragenter'].forEach(e=>box.addEventListener(e,x=>{x.preventDefault();box.classList.add('over')}));['dragleave','drop'].forEach(e=>box.addEventListener(e,x=>{x.preventDefault();box.classList.remove('over')}));box.addEventListener('drop',e=>set(e.dataTransfer.files[0]))}
-['wells','axis'].forEach(bind);
+['wells','axis','ground'].forEach(bind);
 async function read(file){const wb=XLSX.read(await file.arrayBuffer(),{type:'array'});return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:''})}
 function parseWells(rows,warnings){
  const header=rows.findIndex(r=>r.some(v=>/наименование/i.test(String(v)))&&r.some(v=>/мощност/i.test(String(v))));
@@ -644,9 +644,10 @@ $('dxf-export').addEventListener('click',()=>{
  if(!result)return;
  try{
   const groups=new Map();
+  const fictKeys=new Set(result.fict.map(f=>String(f[0])+'|'+String(f[1])));
   for(const r of result.all){
    const key=String(r[0])+'|'+String(r[1]);
-   if(!groups.has(key))groups.set(key,{pk:Number(r[0]),name:String(r[1]),z:Number(r[4]),layers:[],synthetic:result.fict.some(f=>String(f[0])===String(r[0])&&String(f[1])===String(r[1]))});
+   if(!groups.has(key))groups.set(key,{pk:Number(r[0]),name:String(r[1]),z:Number(r[4]),layers:[],synthetic:fictKeys.has(key)});
    groups.get(key).layers.push({t:Number(r[5]),g:String(r[6])});
   }
   const wells=[...groups.values()].filter(w=>Number.isFinite(w.pk)&&Number.isFinite(w.z)).sort((a,b)=>a.pk-b.pk||a.name.localeCompare(b.name,'ru'));
