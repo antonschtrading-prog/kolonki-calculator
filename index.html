@@ -817,16 +817,29 @@ $('save').addEventListener('click',()=>{
   }).sort((a,b)=>a.x-b.x);
  }
  function assignNames(columns,texts){
-  const labels=texts.filter(t=>nameRe.test(t.text)&&!/^скв\.?\s*$/i.test(t.text.trim())),pairs=[];
+  const labels=[];
+  for(const t of texts){
+   const raw=t.text.trim();
+   if(nameRe.test(raw)&&!/^скв\.?\s*$/i.test(raw))labels.push(t);
+   // Некоторые подписи в исходном DXF разбиты на два TEXT: «скв.» и «Л-149».
+   if(/^скв\.?\s*$/i.test(raw)){
+    const suffix=texts.filter(q=>q!==t&&/^(?:[А-ЯЁA-Z]{1,4}[-.]?\d+[А-ЯЁA-Z0-9/-]*|\d+[А-ЯЁA-Z0-9/-]*)$/i.test(q.text.trim())&&
+      Math.abs(q.x-t.x)<12&&Math.abs(q.y-t.y)<5)
+      .sort((a,b)=>Math.hypot(a.x-t.x,a.y-t.y)-Math.hypot(b.x-t.x,b.y-t.y))[0];
+    if(suffix)labels.push({text:'скв.'+suffix.text.trim(),x:(t.x+suffix.x)/2,y:Math.max(t.y,suffix.y)});
+   }
+  }
+  const pairs=[];
   for(let i=0;i<columns.length;i++)for(let j=0;j<labels.length;j++){
    const c=columns[i],t=labels[j],dx=Math.abs(t.x-c.x),dy=t.y-c.top;
-   // Подпись над колонкой; ограничение по X исключает дальние совпадения.
-   if(dx<=22&&dy>=-1&&dy<=22)pairs.push({i,j,score:dx+Math.abs(dy-5)*0.12});
+   if(dx<=18&&dy>=-1&&dy<=22)pairs.push({i,j,score:dx+Math.abs(dy-5)*0.12});
   }
   pairs.sort((a,b)=>a.score-b.score);
   const names=columns.map((_,i)=>'Скв. '+(i+1)),usedI=new Set(),usedJ=new Set(),usedNames=new Set();
-  for(const p of pairs)if(!usedI.has(p.i)&&!usedJ.has(p.j)&&!usedNames.has(labels[p.j].text.toLowerCase().trim())){
-   names[p.i]=labels[p.j].text;usedI.add(p.i);usedJ.add(p.j);usedNames.add(labels[p.j].text.toLowerCase().trim());
+  for(const p of pairs){
+   const name=labels[p.j].text.trim(),key=name.toLowerCase();
+   if(usedI.has(p.i)||usedJ.has(p.j)||usedNames.has(key))continue;
+   names[p.i]=name;usedI.add(p.i);usedJ.add(p.j);usedNames.add(key);
   }
   return names;
  }
