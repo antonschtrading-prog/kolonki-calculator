@@ -919,7 +919,7 @@ $('save').addEventListener('click',()=>{
     // Подписи глубины СПРАВА — первичный источник. Засечки не создают слои.
     // В одной горизонтальной зоне подпись принадлежит только ближайшей колонке.
     const next=columns[i+1],rightLimit=next?Math.min(w.x+10,(w.x+next.x)/2):w.x+10;
-    const depthLabels=texts.filter(t=>/^\\d+(?:[.,]\\d+)?$/.test(t.text.trim())&&
+    const depthLabels=texts.filter(t=>/^\d+(?:[.,]\d+)?$/.test(t.text.trim())&&
       t.x>=w.right+0.3&&t.x<rightLimit&&t.y<=w.top+1.5&&t.y>=w.bottom-6&&
       num(t.text)>0&&num(t.text)<=100&&!circled.includes(t)).sort((a,b)=>b.y-a.y);
     const decimal=depthLabels.filter(t=>/[.,]/.test(t.text));
