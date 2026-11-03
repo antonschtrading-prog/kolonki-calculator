@@ -817,16 +817,16 @@ $('save').addEventListener('click',()=>{
   }).sort((a,b)=>a.x-b.x);
  }
  function assignNames(columns,texts){
-  const labels=texts.filter(t=>nameRe.test(t.text)),pairs=[];
+  const labels=texts.filter(t=>nameRe.test(t.text)&&!/^скв\.?\s*$/i.test(t.text.trim())),pairs=[];
   for(let i=0;i<columns.length;i++)for(let j=0;j<labels.length;j++){
    const c=columns[i],t=labels[j],dx=Math.abs(t.x-c.x),dy=t.y-c.top;
    // Подпись над колонкой; ограничение по X исключает дальние совпадения.
    if(dx<=12&&dy>=-1&&dy<=22)pairs.push({i,j,score:dx+Math.abs(dy-5)*0.12});
   }
   pairs.sort((a,b)=>a.score-b.score);
-  const names=columns.map((_,i)=>'Скв. '+(i+1)),usedI=new Set(),usedJ=new Set();
-  for(const p of pairs)if(!usedI.has(p.i)&&!usedJ.has(p.j)){
-   names[p.i]=labels[p.j].text;usedI.add(p.i);usedJ.add(p.j);
+  const names=columns.map((_,i)=>'Скв. '+(i+1)),usedI=new Set(),usedJ=new Set(),usedNames=new Set();
+  for(const p of pairs)if(!usedI.has(p.i)&&!usedJ.has(p.j)&&!usedNames.has(labels[p.j].text.toLowerCase().trim())){
+   names[p.i]=labels[p.j].text;usedI.add(p.i);usedJ.add(p.j);usedNames.add(labels[p.j].text.toLowerCase().trim());
   }
   return names;
  }
@@ -917,7 +917,8 @@ $('save').addEventListener('click',()=>{
     }
    }
    render();$('ex-save').disabled=false;
-   showStatus('Найдено '+columns.length+' кандидатов колонок (в контрольном DXF ожидается 97), '+data.length+' подписей глубин. Первая: '+names[0]+' = '+pkLabel(start)+'. Проверьте лишние колонки и спорные глубины.');
+   const unnamed=names.filter((n,i)=>n==='Скв. '+(i+1)).length;
+   showStatus('Графических колонок: '+columns.length+' (ожидалось 97); без надёжного названия: '+unnamed+'. Первая: '+names[0]+' = '+pkLabel(start)+'. Колонки не удалены автоматически.');
   }catch(e){showStatus(e.message||String(e),true);console.error(e)}
  };
  $('ex-save').onclick=()=>{
