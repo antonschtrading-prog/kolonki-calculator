@@ -783,34 +783,52 @@ $('save').addEventListener('click',()=>{
    const g=entity.g;
    if(entity.type==='TEXT'&&Number.isFinite(num(g[10]))&&Number.isFinite(num(g[20])))out.texts.push({text:g[1]||'',x:num(g[10]),y:num(g[20])});
    if(entity.type==='CIRCLE')out.circles.push({x:num(g[10]),y:num(g[20]),r:num(g[40])});
-   if(entity.type==='LINE')out.segments.push({x1:num(g[10]),y1:num(g[20]),x2:num(g[11]),y2:num(g[21])});
+   if(entity.type==='LINE')out.segments.push({x1:num(g[10]),y1:num(g[20]),x2:num(g[11]),y2:num(g[21]),layer:g[8]||''});
+   if(entity.type==='LWPOLYLINE'){
+    const v=entity.vertices;
+    for(let i=1;i<v.length;i++)out.segments.push({x1:v[i-1][0],y1:v[i-1][1],x2:v[i][0],y2:v[i][1],layer:g[8]||''});
+    if(Number(g[70]||0)&1&&v.length>2)out.segments.push({x1:v[v.length-1][0],y1:v[v.length-1][1],x2:v[0][0],y2:v[0][1],layer:g[8]||''});
+   }
    entity=null;
   }
   for(let i=0;i+1<lines.length;i+=2){
    const code=lines[i].trim(),value=lines[i+1].trim();
-   if(code==='0'){flush();if(['TEXT','CIRCLE','LINE'].includes(value))entity={type:value,g:{}};continue}
-   if(entity)entity.g[code]=value;
+   if(code==='0'){flush();if(['TEXT','CIRCLE','LINE','LWPOLYLINE'].includes(value))entity={type:value,g:{},vertices:[]};continue}
+   if(!entity)continue;
+   if(entity.type==='LWPOLYLINE'&&code==='10'){entity.vertices.push([num(value),NaN]);continue}
+   if(entity.type==='LWPOLYLINE'&&code==='20'){if(entity.vertices.length)entity.vertices[entity.vertices.length-1][1]=num(value);continue}
+   entity.g[code]=value;
   }
   flush();return out;
  }
  function extractColumns(geo){
-  const vertical=geo.segments.filter(l=>Math.abs(l.x1-l.x2)<0.04&&Math.abs(l.y2-l.y1)>=12)
-   .map(l=>({x:l.x1,top:Math.max(l.y1,l.y2),bottom:Math.min(l.y1,l.y2)})).sort((a,b)=>a.x-b.x);
-  const columns=[];
-  for(let i=0;i<vertical.length;i++){
-   const a=vertical[i];let best=null;
-   for(let j=i+1;j<vertical.length&&vertical[j].x-a.x<4.5;j++){
-    const b=vertical[j],width=b.x-a.x;
-    if(width<0.7||width>3.5||Math.abs(a.top-b.top)>0.15||Math.abs(a.bottom-b.bottom)>0.15)continue;
-    const score=Math.abs(width-2);
-    if(!best||score<best.score)best={j,b,score};
-   }
-   if(!best)continue;
-   const b=best.b,x=(a.x+b.x)/2,right=Math.max(a.x,b.x);
-   const existing=columns.some(c=>Math.abs(c.x-x)<2&&Math.abs(c.top-a.top)<0.2);
-   if(!existing)columns.push({x,right,top:a.top,bottom:a.bottom});
+  // Скважина — группа коротких горизонтальных рисок шириной ~2 единицы на геологическом слое.
+  const ticks=geo.segments.filter(l=>/ГЕОЛОГИЯ/i.test(l.layer)&&Math.abs(l.y1-l.y2)<0.06&&
+    Math.abs(Math.abs(l.x2-l.x1)-2)<0.3).map(l=>({x:(l.x1+l.x2)/2,y:(l.y1+l.y2)/2})).sort((a,b)=>a.x-b.x);
+  const groups=[];
+  for(const t of ticks){
+   let g=groups.find(q=>Math.abs(q.x-t.x)<0.3);
+   if(!g){g={x:t.x,ys:[]};groups.push(g)}
+   if(!g.ys.some(y=>Math.abs(y-t.y)<0.12))g.ys.push(t.y);
   }
-  return columns.sort((a,b)=>a.x-b.x);
+  return groups.filter(g=>g.ys.length>=2).map(g=>{
+   const ys=g.ys.sort((a,b)=>b-a);
+   return {x:g.x,right:g.x+1,top:ys[0],bottom:ys[ys.length-1],levels:ys};
+  }).sort((a,b)=>a.x-b.x);
+ }
+ function assignNames(columns,texts){
+  const labels=texts.filter(t=>nameRe.test(t.text)),pairs=[];
+  for(let i=0;i<columns.length;i++)for(let j=0;j<labels.length;j++){
+   const c=columns[i],t=labels[j],dx=Math.abs(t.x-c.x),dy=t.y-c.top;
+   // Подпись над колонкой; ограничение по X исключает дальние совпадения.
+   if(dx<=12&&dy>=-1&&dy<=22)pairs.push({i,j,score:dx+Math.abs(dy-5)*0.12});
+  }
+  pairs.sort((a,b)=>a.score-b.score);
+  const names=columns.map((_,i)=>'Скв. '+(i+1)),usedI=new Set(),usedJ=new Set();
+  for(const p of pairs)if(!usedI.has(p.i)&&!usedJ.has(p.j)){
+   names[p.i]=labels[p.j].text;usedI.add(p.i);usedJ.add(p.j);
+  }
+  return names;
  }
  function axisPoints(rows){
   let head=-1,pi=-1,xi=-1,yi=-1;
@@ -851,7 +869,7 @@ $('save').addEventListener('click',()=>{
    const bytes=await dxf.arrayBuffer();
    let content=new TextDecoder('utf-8').decode(bytes);
    if(content.includes('\uFFFD'))content=new TextDecoder('windows-1251').decode(bytes);
-   const geo=parseDXF(content),texts=geo.texts,columns=extractColumns(geo);
+   const geo=parseDXF(content),texts=geo.texts,columns=extractColumns(geo),names=assignNames(columns,texts);
    if(!columns.length)throw Error('Не обнаружены графические колонки: нужны парные вертикальные LINE после разбивки блоков.');
    const wb=XLSX.read(await axis.arrayBuffer(),{type:'array'});
    const pts=axisPoints(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:''}));
@@ -862,14 +880,12 @@ $('save').addEventListener('click',()=>{
    data=[];
    for(let i=0;i<columns.length;i++){
     const w=columns[i],p=start+(w.x-x0)*factor,[x,y]=xyAt(pts,p);
-    const names=texts.filter(t=>nameRe.test(t.text)&&t.y>=w.top-1&&t.y<w.top+18&&Math.abs(t.x-w.x)<24)
-     .sort((a,b)=>Math.abs(a.x-w.x)-Math.abs(b.x-w.x));
-    const name=names.length?names[0].text:'Скв. '+(i+1);
+    const name=names[i];
     // Глубина определяется по поперечным LINE в пределах ширины колонки.
     const boundaries=geo.segments.filter(l=>Math.abs(l.y1-l.y2)<0.06&&l.y1<=w.top+0.12&&l.y1>=w.bottom-0.12&&
       Math.min(l.x1,l.x2)<=w.right+0.15&&Math.max(l.x1,l.x2)>=w.right-0.15&&Math.abs(l.x1-l.x2)>=1.5)
       .map(l=>l.y1).sort((a,b)=>b-a);
-    const levels=[];
+    const levels=[...w.levels];
     for(const yy of boundaries)if(!levels.some(v=>Math.abs(v-yy)<0.12))levels.push(yy);
     const floors=levels.filter(yy=>yy<w.top-0.15).sort((a,b)=>b-a);
     if(!floors.some(yy=>Math.abs(yy-w.bottom)<0.12))floors.push(w.bottom);
@@ -888,7 +904,7 @@ $('save').addEventListener('click',()=>{
     }
    }
    render();$('ex-save').disabled=false;
-   showStatus('Найдено '+columns.length+' графических колонок, '+data.length+' слоёв. ИГЭ взяты только из кружков; проверьте привязку кодов.');
+   showStatus('Найдено '+columns.length+' графических колонок, '+data.length+' слоёв. Первая колонка: '+names[0]+' = '+pkLabel(start)+'. Проверьте глубины и ИГЭ.');
   }catch(e){showStatus(e.message||String(e),true);console.error(e)}
  };
  $('ex-save').onclick=()=>{
