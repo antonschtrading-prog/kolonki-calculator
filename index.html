@@ -809,7 +809,7 @@ $('save').addEventListener('click',()=>{
   for(const t of ticks){
    let g=groups.find(q=>Math.abs(q.x-t.x)<0.3);
    if(!g){g={x:t.x,ys:[]};groups.push(g)}
-   if(!g.ys.some(y=>Math.abs(y-t.y)<0.12))g.ys.push(t.y);
+   if(!g.ys.some(y=>Math.abs(y-t.y)<0.35))g.ys.push(t.y);
   }
   return groups.filter(g=>g.ys.length>=2).map(g=>{
    const ys=g.ys.sort((a,b)=>b-a);
@@ -883,17 +883,19 @@ $('save').addEventListener('click',()=>{
     const name=names[i];
     // Только засечки на самой колонке: короткие поперечные штрихи шириной ~2.
     // Длинные линии между скважинами НЕ являются подошвами слоёв.
-    const floors=w.levels.filter(yy=>yy<w.top-0.15).sort((a,b)=>b-a);
-    let previous=w.top;
+    const floors=w.levels.filter(yy=>yy<w.top-0.35).sort((a,b)=>b-a);
+    let previous=w.top,lastDepth=-Infinity;
     for(const yy of floors){
-     if(previous-yy<0.12)continue;
+     if(previous-yy<0.35)continue;
      // Подпись глубины располагается СПРАВА от колонки и чуть ниже засечки.
      const depthLabels=texts.filter(t=>/^\d+(?:[.,]\d+)?$/.test(t.text)&&
        t.x>=w.right+0.3&&t.x<=w.right+7&&
        yy-t.y>=0.2&&yy-t.y<=4.3&&num(t.text)<=100)
        .sort((a,b)=>Math.abs((a.x-w.right)-2.5)+Math.abs((yy-a.y)-2.28)*2-
          (Math.abs((b.x-w.right)-2.5)+Math.abs((yy-b.y)-2.28)*2));
-     const depth=depthLabels.length?num(depthLabels[0].text):null;
+     const depthCandidate=depthLabels.find(t=>num(t.text)>lastDepth+0.02);
+     const depth=depthCandidate?num(depthCandidate.text):null;
+     if(depth!==null)lastDepth=depth;
      // ИГЭ только из кружков; код относится к полосе между двумя засечками.
      const mid=(previous+yy)/2;
      const codes=circled.filter(t=>t.y<previous+1.4&&t.y>yy-1.4&&
@@ -905,6 +907,7 @@ $('save').addEventListener('click',()=>{
      if(depth===null)flags.push('Нет подписи глубины');
      if(!code)flags.push('Не найден ИГЭ');
      if(depthLabels.length>1)flags.push('Проверить глубину');
+     if(depth===null&&depthLabels.length)flags.push('Подписи глубин не возрастают');
      if(codes.length>1)flags.push('Проверить ИГЭ');
      data.push({pk:pkLabel(p),name,depth:depth===null?'':depth.toFixed(2),ige:code,x:x===null?'':x.toFixed(3),y:y===null?'':y.toFixed(3),
       check:flags.join('; ')||'По засечке'});
