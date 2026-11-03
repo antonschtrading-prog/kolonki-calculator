@@ -552,7 +552,7 @@ function parseAxis(rows){
  return pts;
 }
 function axisXY(axis,p,warnings){
- if(p<axis[0][0]||p>axis[axis.length-1][0]){warnings.push('ПК '+p+': вне диапазона ведомости оси');return [null,null]}
+ if(p<axis[0][0]||p>axis[axis.length-1][0]){const gap=p<axis[0][0]?axis[0][0]-p:p-axis[axis.length-1][0];if(gap>100){warnings.push('ПК '+p+': более 100 м вне ведомости координат оси — X/Y не рассчитаны');return [null,null]}warnings.push('ПК '+p+': координаты X/Y экстраполированы на '+fmt(gap)+' м за пределами ведомости оси')}
  let lo=0,hi=axis.length-1;
  while(lo<hi){const mid=(lo+hi+1)>>1;if(axis[mid][0]<=p)lo=mid;else hi=mid-1}
  const a=axis[Math.min(lo,axis.length-2)],b=axis[Math.min(lo+1,axis.length-1)],f=(p-a[0])/(b[0]-a[0]);
