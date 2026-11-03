@@ -776,17 +776,41 @@ $('save').addEventListener('click',()=>{
  const pkLabel=p=>{const a=Math.floor(p/100),b=(p-a*100).toFixed(2).padStart(5,'0');return a+'+'+b};
  const showStatus=(s,bad=false)=>{$('ex-status').textContent=s;$('ex-status').classList.toggle('err',bad)};
  function parseDXF(content){
-  const lines=content.replace(/\r/g,'').split('\n'),out=[];let entity=null,section='';
-  function flush(){if(entity&&entity.type==='TEXT'&&Number.isFinite(entity.x)&&Number.isFinite(entity.y)&&entity.text)out.push(entity);entity=null}
+  const lines=content.replace(/\r/g,'').split('\n'),out={texts:[],circles:[],segments:[]};
+  let entity=null;
+  function flush(){
+   if(!entity)return;
+   const g=entity.g;
+   if(entity.type==='TEXT'&&Number.isFinite(num(g[10]))&&Number.isFinite(num(g[20])))out.texts.push({text:g[1]||'',x:num(g[10]),y:num(g[20])});
+   if(entity.type==='CIRCLE')out.circles.push({x:num(g[10]),y:num(g[20]),r:num(g[40])});
+   if(entity.type==='LINE')out.segments.push({x1:num(g[10]),y1:num(g[20]),x2:num(g[11]),y2:num(g[21])});
+   entity=null;
+  }
   for(let i=0;i+1<lines.length;i+=2){
-   const code=lines[i].trim(),value=lines[i+1];
-   if(code==='0'){flush();if(value.trim()==='TEXT')entity={type:'TEXT',text:'',x:NaN,y:NaN};continue}
-   if(!entity)continue;
-   if(code==='1')entity.text=value.trim();
-   if(code==='10')entity.x=num(value);
-   if(code==='20')entity.y=num(value);
+   const code=lines[i].trim(),value=lines[i+1].trim();
+   if(code==='0'){flush();if(['TEXT','CIRCLE','LINE'].includes(value))entity={type:value,g:{}};continue}
+   if(entity)entity.g[code]=value;
   }
   flush();return out;
+ }
+ function extractColumns(geo){
+  const vertical=geo.segments.filter(l=>Math.abs(l.x1-l.x2)<0.04&&Math.abs(l.y2-l.y1)>=12)
+   .map(l=>({x:l.x1,top:Math.max(l.y1,l.y2),bottom:Math.min(l.y1,l.y2)})).sort((a,b)=>a.x-b.x);
+  const columns=[];
+  for(let i=0;i<vertical.length;i++){
+   const a=vertical[i];let best=null;
+   for(let j=i+1;j<vertical.length&&vertical[j].x-a.x<4.5;j++){
+    const b=vertical[j],width=b.x-a.x;
+    if(width<0.7||width>3.5||Math.abs(a.top-b.top)>0.15||Math.abs(a.bottom-b.bottom)>0.15)continue;
+    const score=Math.abs(width-2);
+    if(!best||score<best.score)best={j,b,score};
+   }
+   if(!best)continue;
+   const b=best.b,x=(a.x+b.x)/2,right=Math.max(a.x,b.x);
+   const existing=columns.some(c=>Math.abs(c.x-x)<2&&Math.abs(c.top-a.top)<0.2);
+   if(!existing)columns.push({x,right,top:a.top,bottom:a.bottom});
+  }
+  return columns.sort((a,b)=>a.x-b.x);
  }
  function axisPoints(rows){
   let head=-1,pi=-1,xi=-1,yi=-1;
@@ -827,30 +851,44 @@ $('save').addEventListener('click',()=>{
    const bytes=await dxf.arrayBuffer();
    let content=new TextDecoder('utf-8').decode(bytes);
    if(content.includes('\uFFFD'))content=new TextDecoder('windows-1251').decode(bytes);
-   const texts=parseDXF(content);
-   const wells=texts.filter(t=>nameRe.test(t.text)).sort((a,b)=>a.x-b.x);
-   if(!wells.length)throw Error('В DXF не обнаружены подписи скважин TEXT. Проверьте, что блоки разбиты.');
+   const geo=parseDXF(content),texts=geo.texts,columns=extractColumns(geo);
+   if(!columns.length)throw Error('Не обнаружены графические колонки: нужны парные вертикальные LINE после разбивки блоков.');
    const wb=XLSX.read(await axis.arrayBuffer(),{type:'array'});
    const pts=axisPoints(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:''}));
-   const h=Number($('ex-h').value),vs=Number($('ex-soil').value),factor=h/1000;
-   const x0=wells[0].x;
+   const h=Number($('ex-h').value),vs=Number($('ex-soil').value);
+   const factor=h/1000,depthFactor=vs/1000;
+   const x0=columns[0].x;
+   const circled=texts.filter(t=>geo.circles.some(c=>Math.hypot(c.x-t.x,c.y-t.y)<c.r+1.2));
    data=[];
-   for(const w of wells){
-    const p=start+(w.x-x0)*factor,[x,y]=xyAt(pts,p);
-    // Числа возле каждой скважины — кандидаты глубин; код ИГЭ пока только с ручным подтверждением.
-    const near=texts.filter(t=>t!==w&&Math.abs(t.x-w.x)<18&&t.y<w.y&&/^(\d+[.,]\d+)$/.test(t.text)&&num(t.text)>0&&num(t.text)<80).sort((a,b)=>b.y-a.y);
-    const depths=[];
-    for(const t of near){
-     const d=num(t.text);if(!depths.some(v=>Math.abs(v-d)<0.05))depths.push(d);
-    }
-    depths.sort((a,b)=>a-b);
-    if(!depths.length)depths.push(null);
-    for(const d of depths){
-     data.push({pk:pkLabel(p),name:w.text,depth:d===null?'':d.toFixed(2),ige:'',x:x===null?'':x.toFixed(3),y:y===null?'':y.toFixed(3),check:'Проверить глубину и ИГЭ'});
+   for(let i=0;i<columns.length;i++){
+    const w=columns[i],p=start+(w.x-x0)*factor,[x,y]=xyAt(pts,p);
+    const names=texts.filter(t=>nameRe.test(t.text)&&t.y>=w.top-1&&t.y<w.top+18&&Math.abs(t.x-w.x)<24)
+     .sort((a,b)=>Math.abs(a.x-w.x)-Math.abs(b.x-w.x));
+    const name=names.length?names[0].text:'Скв. '+(i+1);
+    // Глубина определяется по поперечным LINE в пределах ширины колонки.
+    const boundaries=geo.segments.filter(l=>Math.abs(l.y1-l.y2)<0.06&&l.y1<=w.top+0.12&&l.y1>=w.bottom-0.12&&
+      Math.min(l.x1,l.x2)<=w.right+0.15&&Math.max(l.x1,l.x2)>=w.right-0.15&&Math.abs(l.x1-l.x2)>=1.5)
+      .map(l=>l.y1).sort((a,b)=>b-a);
+    const levels=[];
+    for(const yy of boundaries)if(!levels.some(v=>Math.abs(v-yy)<0.12))levels.push(yy);
+    const floors=levels.filter(yy=>yy<w.top-0.15).sort((a,b)=>b-a);
+    if(!floors.some(yy=>Math.abs(yy-w.bottom)<0.12))floors.push(w.bottom);
+    let previous=w.top;
+    for(const yy of floors){
+     if(previous-yy<0.12)continue;
+     const depth=(w.top-yy)*depthFactor,mid=(previous+yy)/2;
+     // ИГЭ берём исключительно из текста внутри CIRCLE, ближайшего по высоте к середине слоя.
+     const codes=circled.filter(t=>Math.abs(t.y-mid)<Math.max(5,(previous-yy)/2+3)&&
+       Math.abs(t.x-w.x)<38&&t.y<previous+2&&t.y>yy-2&&/^[0-9]+[а-яa-z]?$/i.test(t.text))
+       .sort((a,b)=>Math.abs(a.y-mid)-Math.abs(b.y-mid)||Math.abs(a.x-w.x)-Math.abs(b.x-w.x));
+     const code=codes.length?codes[0].text:'';
+     data.push({pk:pkLabel(p),name,depth:depth.toFixed(2),ige:code,x:x===null?'':x.toFixed(3),y:y===null?'':y.toFixed(3),
+      check:code?'Проверить привязку ИГЭ':'ИГЭ не определён — проверить'});
+     previous=yy;
     }
    }
    render();$('ex-save').disabled=false;
-   showStatus('Найдено '+wells.length+' подписей скважин, '+data.length+' строк. Глубины предварительные; ИГЭ требуют проверки.');
+   showStatus('Найдено '+columns.length+' графических колонок, '+data.length+' слоёв. ИГЭ взяты только из кружков; проверьте привязку кодов.');
   }catch(e){showStatus(e.message||String(e),true);console.error(e)}
  };
  $('ex-save').onclick=()=>{
