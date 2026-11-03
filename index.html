@@ -699,12 +699,17 @@ $('dxf-export').addEventListener('click',()=>{
      fill(l.x,p.top,p.bottom,rr.x,v.top,v.bottom,p.g);
      ln(l.x,Y(p.top),rr.x,Y(v.top),'BOUNDARIES');
      ln(l.x,Y(p.bottom),rr.x,Y(v.bottom),'BOUNDARIES');
-     const avg=(p.t+v.t)/2;
-     if(avg>=0.25){
-      const mx=(l.x+rr.x)/2,my=(Y(p.top)+Y(p.bottom)+Y(v.top)+Y(v.bottom))/4;
-      tx(mx,my,p.g,1.8,'IGE_CODES');
-     }
+
     }
+   }
+   // Одна подпись кода на геологический участок, по центру видимой части слоя.
+   for(let j=0;j<pp.length;j++){
+    const f=pp[j].a>0&&pp[j].b>0?0.5:pp[j].a>0?0.25:0.75;
+    const p=a.pk+(b.pk-a.pk)*f,earth=groundZ(result.ground,p);
+    let depth=0;
+    for(let h=0;h<j;h++){const v=pp[h];depth+=v.a&&v.b?v.a+(v.b-v.a)*f:v.a?v.a*Math.max(0,1-2*f):v.b*Math.max(0,2*f-1)}
+    const v=pp[j],th=v.a&&v.b?v.a+(v.b-v.a)*f:v.a?v.a*Math.max(0,1-2*f):v.b*Math.max(0,2*f-1);
+    if(th>=0.35)tx(X(p),Y(earth-depth-th/2),v.g,2,'IGE_CODES');
    }
   }
   let lastNamePk=-Infinity;
