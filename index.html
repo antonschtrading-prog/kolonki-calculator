@@ -881,21 +881,24 @@ $('save').addEventListener('click',()=>{
    for(let i=0;i<columns.length;i++){
     const w=columns[i],p=start+(w.x-x0)*factor,[x,y]=xyAt(pts,p);
     const name=names[i];
-    // Только засечки на самой колонке: короткие поперечные штрихи шириной ~2.
-    // Длинные линии между скважинами НЕ являются подошвами слоёв.
-    const floors=w.levels.filter(yy=>yy<w.top-0.35).sort((a,b)=>b-a);
-    let previous=w.top,lastDepth=-Infinity;
-    for(const yy of floors){
-     if(previous-yy<0.35)continue;
-     // Подпись глубины располагается СПРАВА от колонки и чуть ниже засечки.
-     const depthLabels=texts.filter(t=>/^\d+(?:[.,]\d+)?$/.test(t.text)&&
-       t.x>=w.right+0.3&&t.x<=w.right+7&&
-       yy-t.y>=0.2&&yy-t.y<=4.3&&num(t.text)<=100)
-       .sort((a,b)=>Math.abs((a.x-w.right)-2.5)+Math.abs((yy-a.y)-2.28)*2-
-         (Math.abs((b.x-w.right)-2.5)+Math.abs((yy-b.y)-2.28)*2));
-     const depthCandidate=depthLabels.find(t=>num(t.text)>lastDepth+0.02);
-     const depth=depthCandidate?num(depthCandidate.text):null;
-     if(depth!==null)lastDepth=depth;
+    // Подписи глубины СПРАВА — первичный источник. Засечки не создают слои.
+    // В одной горизонтальной зоне подпись принадлежит только ближайшей колонке.
+    const next=columns[i+1],rightLimit=next?Math.min(w.x+10,(w.x+next.x)/2):w.x+10;
+    const depthLabels=texts.filter(t=>/^\d+(?:[.,]\d+)?$/.test(t.text)&&
+      t.x>=w.right+0.3&&t.x<rightLimit&&
+      t.y<=w.top+1.5&&t.y>=w.bottom-4&&num(t.text)>0&&num(t.text)<=100&&
+      !circled.includes(t))
+      .sort((a,b)=>b.y-a.y);
+    const accepted=[],rejected=[];
+    for(const t of depthLabels){
+     const depth=num(t.text);
+     if(accepted.length&&depth<=accepted[accepted.length-1].depth+0.025){rejected.push(t);continue}
+     if(accepted.some(q=>Math.abs(q.y-t.y)<0.45)){rejected.push(t);continue}
+     accepted.push({depth,y:t.y});
+    }
+    let previous=w.top;
+    for(const item of accepted){
+     const depth=item.depth,yy=item.y+2.0;
      // ИГЭ только из кружков; код относится к полосе между двумя засечками.
      const mid=(previous+yy)/2;
      const codes=circled.filter(t=>t.y<previous+1.4&&t.y>yy-1.4&&
@@ -904,18 +907,17 @@ $('save').addEventListener('click',()=>{
          (Math.abs(b.x-w.x)+Math.abs(b.y-mid)*0.15));
      const code=codes.length?codes[0].text:'';
      const flags=[];
-     if(depth===null)flags.push('Нет подписи глубины');
+     if(rejected.length)flags.push('Есть спорные подписи глубин');
      if(!code)flags.push('Не найден ИГЭ');
-     if(depthLabels.length>1)flags.push('Проверить глубину');
-     if(depth===null&&depthLabels.length)flags.push('Подписи глубин не возрастают');
+
      if(codes.length>1)flags.push('Проверить ИГЭ');
-     data.push({pk:pkLabel(p),name,depth:depth===null?'':depth.toFixed(2),ige:code,x:x===null?'':x.toFixed(3),y:y===null?'':y.toFixed(3),
+     data.push({pk:pkLabel(p),name,depth:depth.toFixed(2),ige:code,x:x===null?'':x.toFixed(3),y:y===null?'':y.toFixed(3),
       check:flags.join('; ')||'По засечке'});
      previous=yy;
     }
    }
    render();$('ex-save').disabled=false;
-   showStatus('Найдено '+columns.length+' графических колонок, '+data.length+' слоёв. Первая колонка: '+names[0]+' = '+pkLabel(start)+'. Проверьте глубины и ИГЭ.');
+   showStatus('Найдено '+columns.length+' кандидатов колонок (в контрольном DXF ожидается 97), '+data.length+' подписей глубин. Первая: '+names[0]+' = '+pkLabel(start)+'. Проверьте лишние колонки и спорные глубины.');
   }catch(e){showStatus(e.message||String(e),true);console.error(e)}
  };
  $('ex-save').onclick=()=>{
