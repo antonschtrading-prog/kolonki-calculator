@@ -781,7 +781,7 @@ $('save').addEventListener('click',()=>{
   function flush(){
    if(!entity)return;
    const g=entity.g;
-   if(entity.type==='TEXT'&&Number.isFinite(num(g[10]))&&Number.isFinite(num(g[20])))out.texts.push({text:g[1]||'',x:num(g[10]),y:num(g[20])});
+   if(entity.type==='TEXT'&&Number.isFinite(num(g[10]))&&Number.isFinite(num(g[20])))out.texts.push({text:g[1]||'',x:num(g[10]),y:num(g[20]),handle:g[5]||''});
    if(entity.type==='CIRCLE')out.circles.push({x:num(g[10]),y:num(g[20]),r:num(g[40])});
    if(entity.type==='LINE')out.segments.push({x1:num(g[10]),y1:num(g[20]),x2:num(g[11]),y2:num(g[21]),layer:g[8]||''});
    if(entity.type==='LWPOLYLINE'){
@@ -809,19 +809,30 @@ $('save').addEventListener('click',()=>{
   flush();return out;
  }
  function extractColumns(geo){
-  // Скважина — группа коротких горизонтальных рисок шириной ~2 единицы на геологическом слое.
-  const ticks=geo.segments.filter(l=>/ГЕОЛОГИЯ/i.test(l.layer)&&Math.abs(l.y1-l.y2)<0.06&&
-    Math.abs(Math.abs(l.x2-l.x1)-2)<0.3).map(l=>({x:(l.x1+l.x2)/2,y:(l.y1+l.y2)/2})).sort((a,b)=>a.x-b.x);
-  const groups=[];
-  for(const t of ticks){
-   let g=groups.find(q=>Math.abs(q.x-t.x)<0.3);
-   if(!g){g={x:t.x,ys:[]};groups.push(g)}
-   if(!g.ys.some(y=>Math.abs(y-t.y)<0.35))g.ys.push(t.y);
+  // Геологическая колонка: две вертикальные стенки на расстоянии 2 единицы.
+  // Засечки используются ТОЛЬКО для нахождения геометрии, не для создания слоёв.
+  const verticals=geo.segments.filter(v=>/ГЕОЛОГИЯ/i.test(v.layer)&&Math.abs(v.x1-v.x2)<0.06&&Math.abs(v.y2-v.y1)>=5)
+   .map(v=>({x:(v.x1+v.x2)/2,top:Math.max(v.y1,v.y2),bottom:Math.min(v.y1,v.y2)})).sort((a,b)=>a.x-b.x);
+  const used=new Set(),columns=[];
+  for(let i=0;i<verticals.length;i++){
+   if(used.has(i))continue;
+   const a=verticals[i];let best=null;
+   for(let j=i+1;j<verticals.length;j++){
+    if(used.has(j))continue;
+    const b=verticals[j],dx=Math.abs(b.x-a.x);
+    if(dx>2.07)break;
+    if(Math.abs(dx-2)>0.06||Math.abs(a.top-b.top)>0.12||Math.abs(a.bottom-b.bottom)>0.12)continue;
+    const score=Math.abs(dx-2)+Math.abs(a.top-b.top)+Math.abs(a.bottom-b.bottom);
+    if(!best||score<best.score)best={j,b,score};
+   }
+   if(!best)continue;
+   used.add(i);used.add(best.j);
+   const x=(a.x+best.b.x)/2,top=(a.top+best.b.top)/2,bottom=(a.bottom+best.b.bottom)/2;
+   const levels=geo.segments.filter(v=>/ГЕОЛОГИЯ/i.test(v.layer)&&Math.abs(v.y1-v.y2)<0.06&&Math.abs(Math.abs(v.x2-v.x1)-2)<0.3&&
+     Math.abs((v.x1+v.x2)/2-x)<0.3).map(v=>(v.y1+v.y2)/2).sort((a,b)=>b-a);
+   columns.push({x,right:x+1,top,bottom,sideTop:top,sideBottom:bottom,levels:[...new Set(levels.map(y=>y.toFixed(3)))].map(Number)});
   }
-  return groups.filter(g=>g.ys.length>=2).map(g=>{
-   const ys=g.ys.sort((a,b)=>b-a);
-   return {x:g.x,right:g.x+1,top:ys[0],bottom:ys[ys.length-1],levels:ys};
-  }).sort((a,b)=>a.x-b.x);
+  return columns.sort((a,b)=>a.x-b.x);
  }
  function assignNames(columns,texts){
   const labels=[];
@@ -899,27 +910,32 @@ $('save').addEventListener('click',()=>{
    const factor=h/1000;
    const x0=columns[0].x;
    const diagnostic=[];
-   const circled=texts.filter(t=>geo.circles.some(c=>Math.hypot(c.x-t.x,c.y-t.y)<c.r+1.2));
+   const circled=texts.filter(t=>geo.circles.some(c=>Math.hypot(c.x-t.x,c.y-t.y)<=c.r+0.2));
    data=[];
    for(let i=0;i<columns.length;i++){
     const w=columns[i],p=start+(w.x-x0)*factor,[x,y]=xyAt(pts,p);
     const name=names[i];
-    diagnostic.push({index:i+1,pk:pkLabel(p),name,x:w.x,ticks:w.levels.length,depths:0});
+    diagnostic.push({index:i+1,pk:pkLabel(p),name,x:w.x,ticks:w.levels.length,depths:0,rejected:''});
     // Подписи глубины СПРАВА — первичный источник. Засечки не создают слои.
     // В одной горизонтальной зоне подпись принадлежит только ближайшей колонке.
     const next=columns[i+1],rightLimit=next?Math.min(w.x+10,(w.x+next.x)/2):w.x+10;
-    const depthLabels=texts.filter(t=>/^\d+(?:[.,]\d+)?$/.test(t.text)&&
-      t.x>=w.right+0.3&&t.x<rightLimit&&
-      t.y<=w.top+1.5&&t.y>=w.bottom-4&&num(t.text)>0&&num(t.text)<=100&&
-      !circled.includes(t))
-      .sort((a,b)=>b.y-a.y);
+    const depthLabels=texts.filter(t=>/^\\d+(?:[.,]\\d+)?$/.test(t.text.trim())&&
+      t.x>=w.right+0.3&&t.x<rightLimit&&t.y<=w.top+1.5&&t.y>=w.bottom-6&&
+      num(t.text)>0&&num(t.text)<=100&&!circled.includes(t)).sort((a,b)=>b.y-a.y);
+    const decimal=depthLabels.filter(t=>/[.,]/.test(t.text));
+    const xs=decimal.map(t=>t.x).sort((a,b)=>a-b);
+    const medianX=xs.length?xs[Math.floor((xs.length-1)/2)]:w.x+3.5;
+    const maxDepth=(w.top-w.bottom)/(1000/Number($('ex-soil').value))+0.11;
     const accepted=[],rejected=[];
     for(const t of depthLabels){
-     const depth=num(t.text);
-     if(accepted.length&&depth<=accepted[accepted.length-1].depth+0.025){rejected.push(t);continue}
-     if(accepted.some(q=>Math.abs(q.y-t.y)<0.45)){rejected.push(t);continue}
-     accepted.push({depth,y:t.y});
+     const depth=num(t.text);let reason='';
+     if(Math.abs(t.x-medianX)>2.5)reason='Подпись вне ряда глубин';
+     else if(depth>maxDepth)reason='Глубина больше длины колонки';
+     else if(accepted.length&&depth<=accepted[accepted.length-1].depth+0.005)reason='Нарушено возрастание глубин';
+     if(reason)rejected.push({text:t.text,handle:t.handle,reason});
+     else accepted.push({depth,y:t.y});
     }
+    diagnostic[diagnostic.length-1].rejected=rejected.map(t=>t.text+': '+t.reason).join('; ');
     let previous=w.top;
     for(const item of accepted){
      const depth=item.depth,yy=item.y+2.0;
@@ -931,7 +947,7 @@ $('save').addEventListener('click',()=>{
          (Math.abs(b.x-w.x)+Math.abs(b.y-mid)*0.15));
      const code=codes.length?codes[0].text:'';
      const flags=[];
-     if(rejected.length)flags.push('Есть спорные подписи глубин');
+     if(rejected.length)flags.push('Есть отклонённые подписи глубин');
      if(!code)flags.push('Не найден ИГЭ');
 
      if(codes.length>1)flags.push('Проверить ИГЭ');
@@ -955,8 +971,8 @@ $('save').addEventListener('click',()=>{
   ws['!cols']=[15,26,25,15,19,19,32].map(wch=>({wch}));
   XLSX.utils.book_append_sheet(wb,ws,'Извлечённые скважины');
   const diag=window.__exDiagnostics||[];
-  const audit=XLSX.utils.aoa_to_sheet([['№ колонки','ПК','Название','X в DXF','Засечек','Подписей глубин','Проверка'],...diag.map(d=>[d.index,d.pk,d.name,d.x,d.ticks,d.depths,d.depths===0?'Нет подписей глубин':d.name==='Скв. '+d.index?'Не установлено название':''])]);
-  audit['!cols']=[12,15,25,20,14,20,30].map(wch=>({wch}));
+  const audit=XLSX.utils.aoa_to_sheet([['№ колонки','ПК','Название','X в DXF','Засечек','Подписей глубин','Отклонённые подписи','Проверка'],...diag.map(d=>[d.index,d.pk,d.name,d.x,d.ticks,d.depths,d.rejected,d.depths===0?'Нет подписей глубин':d.name==='Скв. '+d.index?'Не установлено название':''])]);
+  audit['!cols']=[12,15,25,20,14,20,50,30].map(wch=>({wch}));
   XLSX.utils.book_append_sheet(wb,audit,'Контроль колонок');
   XLSX.writeFile(wb,'Геология_из_DXF_проверить.xlsx');
  };
