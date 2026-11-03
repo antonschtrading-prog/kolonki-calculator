@@ -83,18 +83,18 @@ th{position:sticky;top:0;background:var(--soft);font-family:var(--font);font-wei
 
 </head><body>
 <main>
-<header><h1>Расчёт колонок и фиктивных скважин</h1><p class="lead">Расчёт по двум ведомостям Excel без DXF и Word. Сопоставляются только соседние исходные скважины по ПК.</p></header>
+<header><h1>Расчёт колонок и фиктивных скважин</h1><p class="lead">Расчёт по трём ведомостям Excel без DXF и Word. Сопоставляются только соседние исходные скважины по ПК.</p></header>
 <section><h2>Исходные Excel-файлы</h2><div class="files">
 <label class="drop" id="d-wells"><input type="file" id="f-wells" accept=".xlsx,.xls"><span class="t">Ведомость скважин</span><span class="h">ПК, Наименование, X, Y, Z, Мощность, ИГЭ (или ГИЭ)</span><span class="f" id="n-wells">Не выбран</span></label>
 <label class="drop" id="d-axis"><input type="file" id="f-axis" accept=".xlsx,.xls"><span class="t">Ведомость координат оси</span><span class="h">ПК в метрах, X, Y</span><span class="f" id="n-axis">Не выбран</span></label>
-</div></section>
+<label class="drop" id="d-ground"><input type="file" id="f-ground" accept=".xlsx,.xls"><span class="t">Ведомость отметок земли по оси</span><span class="h">ПК, отметка земли (Z / H / абсолютная отметка)</span><span class="f" id="n-ground">Не выбран</span></label></div></section>
 <section><h2>Параметры</h2><div class="opts">
 <label class="o" for="o-step">Максимальный шаг, м<input id="o-step" type="number" min="0.01" step="1" value="50"></label>
 <label class="o" for="o-round">Округление мощности<select id="o-round"><option value="1">0,1 м</option><option value="2" selected>0,01 м</option><option value="3">0,001 м</option></select></label>
 <label class="o" for="o-prefix">Префикс имени<input id="o-prefix" value="Фикт."></label>
 <label class="o" for="o-export">Состав выгрузки<select id="o-export"><option value="all">Исходные и фиктивные</option><option value="fict">Только фиктивные</option></select></label>
 </div></section>
-<div class="bar"><button id="run" disabled>Рассчитать</button><button id="save" class="alt" disabled>Скачать Excel</button><button id="dxf-export" class="alt" disabled>Скачать геологию DXF</button><span class="status" id="status">Выберите два файла.</span></div>
+<div class="bar"><button id="run" disabled>Рассчитать</button><button id="save" class="alt" disabled>Скачать Excel</button><button id="dxf-export" class="alt" disabled>Скачать геологию DXF</button><span class="status" id="status">Выберите три файла.</span></div>
 <section id="res" hidden><h2>Итог</h2><div class="stats" id="stats"></div></section>
 <section id="chk" hidden><h2>Проверки</h2><div class="checks" id="checks"></div></section>
 <section><h2 id="pv-h">Предпросмотр ведомости</h2><div class="tabs" id="tabs" hidden></div><div class="tw"><table id="pv"><thead></thead><tbody></tbody></table></div><p class="note" id="pv-n">После расчёта здесь появятся результаты.</p></section>
@@ -488,14 +488,14 @@ th{position:sticky;top:0;background:var(--soft);font-family:var(--font);font-wei
 <script>
 (function(){
 'use strict';
-const $=id=>document.getElementById(id), F={wells:null,axis:null};
+const $=id=>document.getElementById(id), F={wells:null,axis:null,ground:null};
 let result=null;
 const HEAD=['ПК','Наименование','Координата X, м','Координата Y, м','Z','Мощность, м','ИГЭ'];
 const num=v=>{if(typeof v==='number')return Number.isFinite(v)?v:NaN;return Number(String(v??'').replace(/\s/g,'').replace(',','.'))};
 const fmt=v=>Number(v.toFixed(6));
 function pk(v){if(typeof v==='number')return v;const s=String(v??'').trim();const m=s.match(/^(\d+)\+(\d+(?:[.,]\d+)?)$/);return m?Number(m[1])*100+num(m[2]):num(s)}
 function status(t,error=false){$('status').textContent=t;$('status').classList.toggle('err',error)}
-function bind(k){const el=$('f-'+k),box=$('d-'+k);function set(f){if(!f)return;F[k]=f;$('n-'+k).textContent=f.name;box.classList.add('ready');$('run').disabled=!(F.wells&&F.axis);status(F.wells&&F.axis?'Файлы выбраны. Нажмите «Рассчитать».':'Выберите второй файл.')}el.addEventListener('change',()=>set(el.files[0]));['dragover','dragenter'].forEach(e=>box.addEventListener(e,x=>{x.preventDefault();box.classList.add('over')}));['dragleave','drop'].forEach(e=>box.addEventListener(e,x=>{x.preventDefault();box.classList.remove('over')}));box.addEventListener('drop',e=>set(e.dataTransfer.files[0]))}
+function bind(k){const el=$('f-'+k),box=$('d-'+k);function set(f){if(!f)return;F[k]=f;$('n-'+k).textContent=f.name;box.classList.add('ready');$('run').disabled=!(F.wells&&F.axis&&F.ground);status(F.wells&&F.axis?'Файлы выбраны. Нажмите «Рассчитать».':'Выберите все три файла.')}el.addEventListener('change',()=>set(el.files[0]));['dragover','dragenter'].forEach(e=>box.addEventListener(e,x=>{x.preventDefault();box.classList.add('over')}));['dragleave','drop'].forEach(e=>box.addEventListener(e,x=>{x.preventDefault();box.classList.remove('over')}));box.addEventListener('drop',e=>set(e.dataTransfer.files[0]))}
 ['wells','axis'].forEach(bind);
 async function read(file){const wb=XLSX.read(await file.arrayBuffer(),{type:'array'});return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:''})}
 function parseWells(rows,warnings){
@@ -521,6 +521,30 @@ function parseWells(rows,warnings){
  const wells=[...groups.values()].sort((a,b)=>a.p-b.p||a.name.localeCompare(b.name,'ru'));
  if(wells.length<2)throw Error('Для расчёта нужны минимум две исходные скважины.');
  return wells;
+}
+function parseGround(rows){
+ const norm=v=>String(v??'').toLowerCase().replace(/ё/g,'е').replace(/[\s.,:;_()\-]+/g,'');
+ let header=-1,ip=-1,iz=-1;
+ for(let i=0;i<Math.min(rows.length,35);i++){
+  const h=rows[i].map(norm);
+  const p=h.findIndex(v=>/^(пк|пk|pk|пикет|пикетаж)$/.test(v));
+  const z=h.findIndex((v,j)=>j!==p&&(/отметк|высот|^z$|^h$|^нземли$|^земля$|^абсотм/.test(v)));
+  if(p>=0&&z>=0){header=i;ip=p;iz=z;break}
+ }
+ if(header<0)throw Error('Ведомость земли: нужны заголовки «ПК» и «Отметка земли» (Z/H).');
+ const pts=[];
+ for(const row of rows.slice(header+1)){const p=pk(row[ip]),z=num(row[iz]);if(Number.isFinite(p)&&Number.isFinite(z))pts.push([p,z])}
+ pts.sort((a,b)=>a[0]-b[0]);
+ const unique=pts.filter((p,i)=>i===0||p[0]!==pts[i-1][0]);
+ if(unique.length<2)throw Error('Ведомость земли: необходимо минимум две разные точки ПК с отметками.');
+ return unique;
+}
+function groundZ(points,p){
+ if(p<points[0][0]||p>points[points.length-1][0])return NaN;
+ let lo=0,hi=points.length-1;
+ while(lo<hi){const m=(lo+hi+1)>>1;if(points[m][0]<=p)lo=m;else hi=m-1}
+ if(lo===points.length-1)return points[lo][1];
+ const a=points[lo],b=points[lo+1];return a[1]+(b[1]-a[1])*(p-a[0])/(b[0]-a[0]);
 }
 function parseAxis(rows){
  const pts=GK.parseAxis(rows);
@@ -606,10 +630,10 @@ $('run').addEventListener('click',async()=>{
   const step=num($('o-step').value),round=Number($('o-round').value);
   if(!Number.isFinite(step)||step<=0)throw Error('Шаг должен быть больше нуля');
   status('Чтение Excel...');
-  const [w,a]=await Promise.all([read(F.wells),read(F.axis)]),warnings=[];
-  const wells=parseWells(w,warnings),axis=parseAxis(a);
+  const [w,a,g]=await Promise.all([read(F.wells),read(F.axis),read(F.ground)]),warnings=[];
+  const wells=parseWells(w,warnings),axis=parseAxis(a),ground=parseGround(g);
   status('Расчёт...');
-  result=calc(wells,axis,step,round,$('o-prefix').value);
+  result=calc(wells,axis,step,round,$('o-prefix').value);result.ground=ground;
   result.warnings.unshift(...warnings);
   render(result);$('save').disabled=false;$('dxf-export').disabled=false;status('Готово. Проверьте предупреждения и скачайте Excel.');
  }catch(e){status(e.message||String(e),true);console.error(e)}
@@ -627,15 +651,15 @@ $('dxf-export').addEventListener('click',()=>{
   }
   const wells=[...groups.values()].filter(w=>Number.isFinite(w.pk)&&Number.isFinite(w.z)).sort((a,b)=>a.pk-b.pk||a.name.localeCompare(b.name,'ru'));
   if(wells.length<2)throw Error('Для профиля нужны минимум две скважины с отметками Z');
-  const origin=wells[0].pk,base=Math.floor(Math.min(...wells.map(w=>w.z-w.layers.reduce((a,l)=>a+(Number.isFinite(l.t)?l.t:0),0)))-2);
+  const origin=wells[0].pk;const colsGround=wells.map(w=>groundZ(result.ground,w.pk));if(colsGround.some(z=>!Number.isFinite(z)))throw Error('Не хватает отметок земли для ПК скважин. Проверьте диапазон ведомости земли.');const base=Math.floor(Math.min(...wells.map((w,i)=>colsGround[i]-w.layers.reduce((a,l)=>a+(Number.isFinite(l.t)?l.t:0),0)))-2);
   const e=[],put=(c,v)=>e.push(String(c),String(v));
   const ln=(x1,y1,x2,y2,layer)=>{if(![x1,y1,x2,y2].every(Number.isFinite))return;put(0,'LINE');put(8,layer);put(10,x1.toFixed(4));put(20,y1.toFixed(4));put(11,x2.toFixed(4));put(21,y2.toFixed(4))};
   const tx=(x,y,t,h,layer)=>{put(0,'TEXT');put(8,layer);put(10,x.toFixed(4));put(20,y.toFixed(4));put(40,h);put(1,String(t).replace(/[\r\n]/g,' '))};
   const solid=(a,b,c,d,layer)=>{put(0,'SOLID');put(8,layer);for(const [i,p] of [a,b,c,d].entries()){put(10+i,p[0].toFixed(4));put(20+i,p[1].toFixed(4))}};
   const X=w=>(w.pk-origin)/5,Y=z=>(z-base)*10;
   const cols=wells.map(w=>{
-   let z=w.z;const layers=w.layers.filter(l=>Number.isFinite(l.t)&&l.t>0).map(l=>{const top=z;z-=l.t;return {g:l.g,top,bottom:z}});
-   return {...w,x:X(w),layers,bottom:z};
+   let z=groundZ(result.ground,w.pk);const layers=w.layers.filter(l=>Number.isFinite(l.t)&&l.t>0).map(l=>{const top=z;z-=l.t;return {g:l.g,top,bottom:z}});
+   return {...w,zGround:groundZ(result.ground,w.pk),x:X(w),layers,bottom:z};
   });
   // Светлая заливка геологических пластов; геометрия остаётся редактируемой.
   const palette=['8','9','250','251','252','253'];
@@ -652,23 +676,32 @@ $('dxf-export').addEventListener('click',()=>{
      put(0,'SOLID');put(8,layer);put(62,palette[(j+k)%palette.length]);
      const pts=[[a.x,Y(l.top)],[b.x,Y(r.top)],[a.x,Y(l.bottom)],[b.x,Y(r.bottom)]];
      for(let q=0;q<4;q++){put(10+q,pts[q][0].toFixed(4));put(20+q,pts[q][1].toFixed(4))}
+     const centerX=(a.x+b.x)/2,centerY=(Y(l.top)+Y(l.bottom)+Y(r.top)+Y(r.bottom))/4;
+     if(/^\d+(?:[.,]\d+)?$/.test(String(l.g).trim()))tx(centerX,centerY,String(l.g).trim(),2,'КОДЫ_ИГЭ');
      ln(a.x,Y(l.top),b.x,Y(r.top),'ГРАНИЦЫ_ИГЭ');ln(a.x,Y(l.bottom),b.x,Y(r.bottom),'ГРАНИЦЫ_ИГЭ');
      j++;k++;
     }else if(dp[j+1][k]>=dp[j][k+1])j++;else k++;
    }
-   ln(a.x,Y(a.z),b.x,Y(b.z),'ЛИНИЯ_УСТЬЕВ');
+   ln(a.x,Y(a.zGround),b.x,Y(b.zGround),'ЛИНИЯ_ЗЕМЛИ');
   }
   // Показываем все скважины; подробные подписи только на исходных.
+  let lastLabeledPk=null;
   for(const w of cols){
-   ln(w.x,Y(w.z),w.x,Y(w.bottom),w.synthetic?'ФИКТИВНЫЕ_СКВАЖИНЫ':'ИСХОДНЫЕ_СКВАЖИНЫ');
+   ln(w.x,Y(w.zGround),w.x,Y(w.bottom),w.synthetic?'ФИКТИВНЫЕ_СКВАЖИНЫ':'ИСХОДНЫЕ_СКВАЖИНЫ');
    for(const l of w.layers){ln(w.x-0.7,Y(l.bottom),w.x+0.7,Y(l.bottom),'ГРАНИЦЫ_ИГЭ')}
-   if(!w.synthetic){
-    tx(w.x+1.5,Y(w.z)+4,w.name,2,'ПОДПИСИ');
-    tx(w.x+1.5,Y(w.z)+1,'ПК '+w.pk.toFixed(2)+' / Z '+w.z.toFixed(2),1.3,'ПОДПИСИ');
-    for(const l of w.layers)tx(w.x+1,Y((l.top+l.bottom)/2),l.g+' / '+(l.top-l.bottom).toFixed(2)+' м',1.2,'ИГЭ');
+   // Подписи скважин с шагом не чаще 100 м, включая первую исходную.
+   if(!w.synthetic&&(lastLabeledPk===null||w.pk-lastLabeledPk>=100-1e-6)){
+    tx(w.x+1.5,Y(w.zGround)+4,w.name,2,'ПОДПИСИ');
+    lastLabeledPk=w.pk;
+   }
+   // Только глубина нижней границы слоя от поверхности земли и цифровой код ИГЭ.
+   let depth=0;
+   for(const l of w.layers){
+    depth+=l.top-l.bottom;
+    if(!w.synthetic)tx(w.x+0.8,Y(l.bottom),depth.toFixed(2),1.3,'ГЛУБИНЫ');
    }
   }
-  tx(cols[0].x,Math.max(...cols.map(w=>Y(w.z)))+15,'ГЕОЛОГИЧЕСКИЙ ПРОФИЛЬ   Г 1:5000   В 1:100',3,'ЗАГОЛОВОК');
+  tx(cols[0].x,Math.max(...cols.map(w=>Y(w.zGround)))+15,'ГЕОЛОГИЧЕСКИЙ ПРОФИЛЬ   Г 1:5000   В 1:100',3,'ЗАГОЛОВОК');
   const dxf=['0','SECTION','2','HEADER','9','$ACADVER','1','AC1021','0','ENDSEC','0','SECTION','2','ENTITIES',...e,'0','ENDSEC','0','EOF'].join('\r\n')+'\r\n';
   const blob=new Blob([dxf],{type:'application/dxf'}),url=URL.createObjectURL(blob),a=document.createElement('a');
   a.href=url;a.download='Геология_Г5000_В100.dxf';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000);
