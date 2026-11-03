@@ -834,6 +834,34 @@ $('save').addEventListener('click',()=>{
   }
   return columns.sort((a,b)=>a.x-b.x);
  }
+
+ function topologyIGE(geo,columns){
+  const seg=geo.segments.filter(e=>/ГЕОЛОГИЯ/i.test(e.layer)&&Math.abs(e.x2-e.x1)>0.08&&Math.hypot(e.x2-e.x1,e.y2-e.y1)>4.5);
+  const nodes=[],adj=[],edges=[];
+  function node(x,y){let i=nodes.findIndex(n=>Math.hypot(n.x-x,n.y-y)<0.08);if(i<0){i=nodes.length;nodes.push({x,y});adj.push([])}return i}
+  for(const e of seg){const a=node(e.x1,e.y1),b=node(e.x2,e.y2),d=Math.hypot(e.x2-e.x1,e.y2-e.y1);adj[a].push([b,d]);adj[b].push([a,d]);edges.push([a,b])}
+  const ends=nodes.map(n=>columns.flatMap((w,i)=>Math.abs(Math.abs(n.x-w.x)-1)<0.14?[...w.levels,w.top,w.bottom].filter(y=>Math.abs(y-n.y)<0.3).map(y=>({i,y})):[]));
+  function trace(ei,ci){
+   const dist=new Map(),q=[];for(const n of edges[ei]){dist.set(n,0);q.push([0,n])}
+   let best=null;
+   while(q.length){q.sort((a,b)=>b[0]-a[0]);const [d,n]=q.pop();if(d!==dist.get(n))continue;
+    for(const t of ends[n])if(t.i===ci&&(!best||d<best.d))best={d,y:t.y};
+    if(best&&d>best.d)continue;
+    for(const [m,w] of adj[n])if(d+w<(dist.get(m)??Infinity)){dist.set(m,d+w);q.push([d+w,m])}
+   }return best;
+  }
+  function hit(x,y,up){let best=null;for(let i=0;i<seg.length;i++){const e=seg[i],lo=Math.min(e.x1,e.x2),hi=Math.max(e.x1,e.x2);
+    if(x<lo||x>hi)continue;const yy=e.y1+(x-e.x1)*(e.y2-e.y1)/(e.x2-e.x1);
+    if((up?yy>y:yy<y)&&(!best||Math.abs(yy-y)<Math.abs(best.y-y)))best={y:yy,i}
+   }return best}
+  return (o,ci,bounds)=>{
+   const u=hit(o.x,o.y,true),d=hit(o.x,o.y,false),a=u?trace(u.i,ci):null,b=d?trace(d.i,ci):null;
+   const near=(p,y)=>p&&Math.abs(p.y-y)<0.3;
+   for(let j=0;j<bounds.length-1;j++)if(near(a,bounds[j])&&near(b,bounds[j+1]))return {j,quality:'both'};
+   for(let j=0;j<bounds.length-1;j++)if(near(a,bounds[j])||near(b,bounds[j+1]))return {j,quality:'one'};
+   return null;
+  };
+ }
  function assignNames(columns,texts){
   const labels=[];
   for(const t of texts){
@@ -910,7 +938,8 @@ $('save').addEventListener('click',()=>{
    const factor=h/1000;
    const x0=columns[0].x;
    const diagnostic=[];
-   const circled=texts.filter(t=>geo.circles.some(c=>Math.hypot(c.x-t.x,c.y-t.y)<=c.r+0.2));
+   const circleCodes=geo.circles.map(c=>{const t=texts.find(t=>/^[0-9]+[а-яa-z]?$/i.test(t.text.trim())&&Math.hypot(c.x-t.x,c.y-t.y)<=c.r+0.2);return t?{x:c.x,y:c.y,code:t.text.trim(),text:t}:null}).filter(Boolean);
+   const circled=circleCodes.map(c=>c.text),topo=topologyIGE(geo,columns);let ambiguous=0,missing=0;
    data=[];
    for(let i=0;i<columns.length;i++){
     const w=columns[i],p=start+(w.x-x0)*factor,[x,y]=xyAt(pts,p);
@@ -936,31 +965,27 @@ $('save').addEventListener('click',()=>{
      else accepted.push({depth,y:t.y});
     }
     diagnostic[diagnostic.length-1].rejected=rejected.map(t=>t.text+': '+t.reason).join('; ');
-    let previous=w.top;
-    for(const item of accepted){
-     const depth=item.depth,yy=item.y+2.0;
-     // ИГЭ только из кружков; код относится к полосе между двумя засечками.
-     const mid=(previous+yy)/2;
-     const codes=circled.filter(t=>t.y<previous+1.4&&t.y>yy-1.4&&
-       Math.abs(t.x-w.x)<40&&/^[0-9]+[а-яa-z]?$/i.test(t.text))
-       .sort((a,b)=>Math.abs(a.x-w.x)+Math.abs(a.y-mid)*0.15-
-         (Math.abs(b.x-w.x)+Math.abs(b.y-mid)*0.15));
-     const code=codes.length?codes[0].text:'';
-     const flags=[];
+    const bounds=[w.top,...accepted.map(z=>w.top-z.depth*1000/Number($('ex-soil').value))];
+    const prev=columns[i-1],nextCol=columns[i+1];
+    const nearby=circleCodes.filter(o=>(prev&&o.x>prev.x+1&&o.x<w.x-1)||(nextCol&&o.x>w.x+1&&o.x<nextCol.x-1));
+    for(let j=0;j<accepted.length;j++){
+     const item=accepted[j],strong=[],weak=[];
+     for(const o of nearby){const z=topo(o,i,bounds);if(z&&z.j===j)(z.quality==='both'?strong:weak).push(o.code)}
+     const candidates=strong.length?strong:weak,distinct=[...new Set(candidates)],flags=[];
+     const code=distinct.length===1?distinct[0]:'';
+     if(distinct.length>1){ambiguous++;flags.push('Неоднозначный ИГЭ: '+distinct.join('/'))}
+     if(!distinct.length){missing++;flags.push('ИГЭ не найден')}
+     if(!strong.length&&weak.length)flags.push('Привязка ИГЭ по одной границе; проверить');
      if(rejected.length)flags.push('Есть отклонённые подписи глубин');
-     if(!code)flags.push('Не найден ИГЭ');
-
-     if(codes.length>1)flags.push('Проверить ИГЭ');
+     if(x===null)flags.push('ПК вне ведомости координат');
      diagnostic[diagnostic.length-1].depths++;
-     data.push({pk:pkLabel(p),name,depth:depth.toFixed(2),ige:code,x:x===null?'':x.toFixed(3),y:y===null?'':y.toFixed(3),
-      check:flags.join('; ')||'По засечке'});
-     previous=yy;
+     data.push({pk:pkLabel(p),name,depth:item.depth.toFixed(2),ige:code,x:x===null?'':x.toFixed(3),y:y===null?'':y.toFixed(3),check:flags.join('; ')||'ИГЭ по двум границам'});
     }
    }
    window.__exDiagnostics=diagnostic;
    render();$('ex-save').disabled=false;
    const unnamed=names.filter((n,i)=>n==='Скв. '+(i+1)).length;
-   showStatus('Графических колонок: '+columns.length+' (ожидалось 97); без надёжного названия: '+unnamed+'. Первая: '+names[0]+' = '+pkLabel(start)+'. Колонки не удалены автоматически.');
+   showStatus('Графических колонок: '+columns.length+' (ожидалось 97); без надёжного названия: '+unnamed+'. Первая: '+names[0]+' = '+pkLabel(start)+'. Неоднозначных ИГЭ: '+ambiguous+', без ИГЭ: '+missing+'. Колонки не удалены автоматически.');
   }catch(e){showStatus(e.message||String(e),true);console.error(e)}
  };
  $('ex-save').onclick=()=>{
