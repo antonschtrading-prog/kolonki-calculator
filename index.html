@@ -639,75 +639,96 @@ $('run').addEventListener('click',async()=>{
  }catch(e){status(e.message||String(e),true);console.error(e)}
  $('run').disabled=false;
 });
-// Геологический разрез: геометрия в миллиметрах на листе (Г 1:5000, В 1:100).
+// Геология в масштабе Г 1:5000, В 1:100. R12 ASCII для совместимости с AutoCAD 2020.
 $('dxf-export').addEventListener('click',()=>{
- if(!result)return;
+ if(!result||!result.ground)return;
  try{
-  const groups=new Map();
-  const fictKeys=new Set(result.fict.map(f=>String(f[0])+'|'+String(f[1])));
+  const key=r=>String(r[0])+'|'+String(r[1]),fictKeys=new Set(result.fict.map(key)),groups=new Map();
   for(const r of result.all){
-   const key=String(r[0])+'|'+String(r[1]);
-   if(!groups.has(key))groups.set(key,{pk:Number(r[0]),name:String(r[1]),z:Number(r[4]),layers:[],synthetic:fictKeys.has(key)});
-   groups.get(key).layers.push({t:Number(r[5]),g:String(r[6])});
+   const k=key(r);
+   if(!groups.has(k))groups.set(k,{pk:Number(r[0]),name:String(r[1]),z:Number(r[4]),synthetic:fictKeys.has(k),layers:[]});
+   const t=Number(r[5]);if(Number.isFinite(t)&&t>0)groups.get(k).layers.push({t,g:String(r[6]).trim()});
   }
-  const wells=[...groups.values()].filter(w=>Number.isFinite(w.pk)&&Number.isFinite(w.z)).sort((a,b)=>a.pk-b.pk||a.name.localeCompare(b.name,'ru'));
-  if(wells.length<2)throw Error('Для профиля нужны минимум две скважины с отметками Z');
-  const origin=wells[0].pk;const colsGround=wells.map(w=>groundZ(result.ground,w.pk));if(colsGround.some(z=>!Number.isFinite(z)))throw Error('Не хватает отметок земли для ПК скважин. Проверьте диапазон ведомости земли.');const base=Math.floor(Math.min(...wells.map((w,i)=>colsGround[i]-w.layers.reduce((a,l)=>a+(Number.isFinite(l.t)?l.t:0),0)))-2);
-  const e=[],put=(c,v)=>e.push(String(c),String(v));
-  const ln=(x1,y1,x2,y2,layer)=>{if(![x1,y1,x2,y2].every(Number.isFinite))return;put(0,'LINE');put(8,layer);put(10,x1.toFixed(4));put(20,y1.toFixed(4));put(11,x2.toFixed(4));put(21,y2.toFixed(4))};
-  const tx=(x,y,t,h,layer)=>{put(0,'TEXT');put(8,layer);put(10,x.toFixed(4));put(20,y.toFixed(4));put(40,h);put(1,String(t).replace(/[\r\n]/g,' '))};
-  const solid=(a,b,c,d,layer)=>{put(0,'SOLID');put(8,layer);for(const [i,p] of [a,b,c,d].entries()){put(10+i,p[0].toFixed(4));put(20+i,p[1].toFixed(4))}};
-  const X=w=>(w.pk-origin)/5,Y=z=>(z-base)*10;
-  const cols=wells.map(w=>{
-   let z=groundZ(result.ground,w.pk);const layers=w.layers.filter(l=>Number.isFinite(l.t)&&l.t>0).map(l=>{const top=z;z-=l.t;return {g:l.g,top,bottom:z}});
-   return {...w,zGround:groundZ(result.ground,w.pk),x:X(w),layers,bottom:z};
-  });
-  // Светлая заливка геологических пластов; геометрия остаётся редактируемой.
-  const palette=['8','9','250','251','252','253'];
-  for(let i=1;i<cols.length;i++){
-   const a=cols[i-1],b=cols[i];
-   // Сопоставление по ИГЭ, с сохранением порядка: не соединяем разные грунты.
-   const dp=Array.from({length:a.layers.length+1},()=>Array(b.layers.length+1).fill(0));
-   for(let j=a.layers.length-1;j>=0;j--)for(let k=b.layers.length-1;k>=0;k--)dp[j][k]=a.layers[j].g===b.layers[k].g?1+dp[j+1][k+1]:Math.max(dp[j+1][k],dp[j][k+1]);
-   let j=0,k=0;
-   while(j<a.layers.length&&k<b.layers.length){
-    if(a.layers[j].g===b.layers[k].g){
-     const l=a.layers[j],r=b.layers[k],layer='ГРУНТ_'+String(l.g).replace(/[^a-zA-Zа-яА-Я0-9_-]/g,'_').slice(0,40);
-     // SOLID — стандартная сущность DXF R12; цвет назначается объекту.
-     put(0,'SOLID');put(8,layer);put(62,palette[(j+k)%palette.length]);
-     const pts=[[a.x,Y(l.top)],[b.x,Y(r.top)],[a.x,Y(l.bottom)],[b.x,Y(r.bottom)]];
-     for(let q=0;q<4;q++){put(10+q,pts[q][0].toFixed(4));put(20+q,pts[q][1].toFixed(4))}
-     const centerX=(a.x+b.x)/2,centerY=(Y(l.top)+Y(l.bottom)+Y(r.top)+Y(r.bottom))/4;
-     if(/^\d+(?:[.,]\d+)?$/.test(String(l.g).trim()))tx(centerX,centerY,String(l.g).trim(),2,'КОДЫ_ИГЭ');
-     ln(a.x,Y(l.top),b.x,Y(r.top),'ГРАНИЦЫ_ИГЭ');ln(a.x,Y(l.bottom),b.x,Y(r.bottom),'ГРАНИЦЫ_ИГЭ');
-     j++;k++;
-    }else if(dp[j+1][k]>=dp[j][k+1])j++;else k++;
+  const wells=[...groups.values()].filter(w=>Number.isFinite(w.pk)&&w.layers.length).sort((a,b)=>a.pk-b.pk||a.name.localeCompare(b.name,'ru'));
+  if(wells.length<2)throw Error('Нужны минимум две скважины с геологическими слоями.');
+  const missing=wells.filter(w=>!Number.isFinite(groundZ(result.ground,w.pk)));
+  if(missing.length)throw Error('Отметки земли отсутствуют для '+missing.length+' скважин. Проверьте диапазон ПК ведомости.');
+  const startPk=wells[0].pk;
+  const bottom=Math.min(...wells.map(w=>groundZ(result.ground,w.pk)-w.layers.reduce((s,l)=>s+l.t,0)));
+  const base=Math.floor(bottom)-3;
+  const X=p=>(p-startPk)/5,Y=z=>(z-base)*10;
+  const lines=[],add=(c,v)=>lines.push(String(c),String(v));
+  const latin=t=>String(t).replace(/[а-яё]/gi,ch=>{const d={а:'a',б:'b',в:'v',г:'g',д:'d',е:'e',ё:'e',ж:'zh',з:'z',и:'i',й:'y',к:'k',л:'L',м:'m',н:'n',о:'o',п:'p',р:'r',с:'s',т:'t',у:'u',ф:'f',х:'h',ц:'ts',ч:'ch',ш:'sh',щ:'sch',ъ:'',ы:'y',ь:'',э:'e',ю:'yu',я:'ya'};const z=d[ch.toLowerCase()]||'_';return ch===ch.toUpperCase()?z.toUpperCase():z}).replace(/[^\x20-\x7E]/g,'_');
+  const layer=t=>latin(t).replace(/[^A-Za-z0-9_-]/g,'_').slice(0,45)||'GEO';
+  const ln=(x1,y1,x2,y2,l)=>{if(![x1,y1,x2,y2].every(Number.isFinite))return;add(0,'LINE');add(8,layer(l));add(10,x1.toFixed(4));add(20,y1.toFixed(4));add(11,x2.toFixed(4));add(21,y2.toFixed(4))};
+  const tx=(x,y,t,h,l)=>{if(![x,y,h].every(Number.isFinite))return;add(0,'TEXT');add(8,layer(l));add(10,x.toFixed(4));add(20,y.toFixed(4));add(40,h);add(1,latin(t));add(7,'STANDARD')};
+  const fill=(x1,t1,b1,x2,t2,b2,code)=>{if(Math.min(t1-b1,t2-b2)<0.00001)return;
+   add(0,'SOLID');add(8,'IGE_'+layer(code));add(62,9);
+   for(const [i,p] of [[x1,Y(t1)],[x2,Y(t2)],[x1,Y(b1)],[x2,Y(b2)]].entries()){add(10+i,p[0].toFixed(4));add(20+i,p[1].toFixed(4))}
+  };
+  const cols=wells.map(w=>({ ...w,earth:groundZ(result.ground,w.pk),x:X(w.pk)}));
+  // Сопоставляем слои по кодам с сохранением последовательности.
+  function pairs(a,b){
+   const n=a.length,m=b.length,dp=Array.from({length:n+1},()=>Array(m+1).fill(0));
+   for(let i=n-1;i>=0;i--)for(let j=m-1;j>=0;j--)dp[i][j]=a[i].g===b[j].g?dp[i+1][j+1]+1:Math.max(dp[i+1][j],dp[i][j+1]);
+   const out=[];let i=0,j=0;
+   while(i<n||j<m){
+    if(i<n&&j<m&&a[i].g===b[j].g){out.push({g:a[i].g,a:a[i].t,b:b[j].t});i++;j++}
+    else if(i<n&&(j===m||dp[i+1][j]>=dp[i][j+1])){out.push({g:a[i].g,a:a[i].t,b:0});i++}
+    else{out.push({g:b[j].g,a:0,b:b[j].t});j++}
    }
-   ln(a.x,Y(a.zGround),b.x,Y(b.zGround),'ЛИНИЯ_ЗЕМЛИ');
+   return out;
   }
-  // Показываем все скважины; подробные подписи только на исходных.
-  let lastLabeledPk=null;
+  // У отсутствующих на одном конце слоёв мощность обнуляется на середине интервала.
+  for(let k=1;k<cols.length;k++){
+   const a=cols[k-1],b=cols[k],pp=pairs(a.layers,b.layers);
+   const profiles=[0,0.5,1].map(f=>{
+    const p=a.pk+(b.pk-a.pk)*f,earth=groundZ(result.ground,p);
+    let top=earth;
+    return {p,x:X(p),earth,layers:pp.map(v=>{
+     const thick=v.a&&v.b?v.a+(v.b-v.a)*f:v.a?v.a*Math.max(0,1-2*f):v.b*Math.max(0,2*f-1);
+     const l={g:v.g,top,bottom:top-thick,t:thick};top=l.bottom;return l;
+    })};
+   });
+   for(let q=0;q<2;q++){
+    const l=profiles[q],rr=profiles[q+1];
+    ln(l.x,Y(l.earth),rr.x,Y(rr.earth),'GROUND');
+    for(let j=0;j<pp.length;j++){
+     const p=l.layers[j],v=rr.layers[j];
+     if(p.t<=0&&v.t<=0)continue;
+     fill(l.x,p.top,p.bottom,rr.x,v.top,v.bottom,p.g);
+     ln(l.x,Y(p.top),rr.x,Y(v.top),'BOUNDARIES');
+     ln(l.x,Y(p.bottom),rr.x,Y(v.bottom),'BOUNDARIES');
+     const avg=(p.t+v.t)/2;
+     if(avg>=0.25){
+      const mx=(l.x+rr.x)/2,my=(Y(p.top)+Y(p.bottom)+Y(v.top)+Y(v.bottom))/4;
+      tx(mx,my,p.g,1.8,'IGE_CODES');
+     }
+    }
+   }
+  }
+  let lastNamePk=-Infinity;
   for(const w of cols){
-   ln(w.x,Y(w.zGround),w.x,Y(w.bottom),w.synthetic?'ФИКТИВНЫЕ_СКВАЖИНЫ':'ИСХОДНЫЕ_СКВАЖИНЫ');
-   for(const l of w.layers){ln(w.x-0.7,Y(l.bottom),w.x+0.7,Y(l.bottom),'ГРАНИЦЫ_ИГЭ')}
-   // Подписи скважин с шагом не чаще 100 м, включая первую исходную.
-   if(!w.synthetic&&(lastLabeledPk===null||w.pk-lastLabeledPk>=100-1e-6)){
-    tx(w.x+1.5,Y(w.zGround)+4,w.name,2,'ПОДПИСИ');
-    lastLabeledPk=w.pk;
-   }
-   // Только глубина нижней границы слоя от поверхности земли и цифровой код ИГЭ.
+   const x=w.x,top=Y(w.earth),total=w.layers.reduce((s,l)=>s+l.t,0);
+   ln(x,top,x,Y(w.earth-total),w.synthetic?'SYNTH_WELLS':'ORIG_WELLS');
    let depth=0;
    for(const l of w.layers){
-    depth+=l.top-l.bottom;
-    if(!w.synthetic)tx(w.x+0.8,Y(l.bottom),depth.toFixed(2),1.3,'ГЛУБИНЫ');
+    depth+=l.t;
+    ln(x-0.7,Y(w.earth-depth),x+0.7,Y(w.earth-depth),'LAYER_DEPTHS');
+    if(!w.synthetic)tx(x+0.9,Y(w.earth-depth),depth.toFixed(2),1.4,'DEPTH_LABELS');
+   }
+   if(!w.synthetic&&w.pk-lastNamePk>=100-1e-8){
+    tx(x+1.2,top+4,w.name,2.3,'WELL_NAMES');
+    lastNamePk=w.pk;
    }
   }
-  tx(cols[0].x,Math.max(...cols.map(w=>Y(w.zGround)))+15,'ГЕОЛОГИЧЕСКИЙ ПРОФИЛЬ   Г 1:5000   В 1:100',3,'ЗАГОЛОВОК');
-  const dxf=['0','SECTION','2','HEADER','9','$ACADVER','1','AC1021','0','ENDSEC','0','SECTION','2','ENTITIES',...e,'0','ENDSEC','0','EOF'].join('\r\n')+'\r\n';
-  const blob=new Blob([dxf],{type:'application/dxf'}),url=URL.createObjectURL(blob),a=document.createElement('a');
-  a.href=url;a.download='Геология_Г5000_В100.dxf';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000);
-  status('DXF сформирован: геология, исходные и фиктивные скважины, границы ИГЭ. Участки с несовпадающими ИГЭ требуют проверки.');
- }catch(err){status('Ошибка DXF: '+err.message,true)}
+  tx(cols[0].x,Math.max(...cols.map(w=>Y(w.earth)))+16,'GEOLOGICAL SECTION  H 1:5000  V 1:100',3,'TITLE');
+  // Старый ASCII DXF: только простые LINE, SOLID, TEXT без повреждённых таблиц и UTF-8.
+  const dxf=['0','SECTION','2','HEADER','9','$ACADVER','1','AC1009','0','ENDSEC','0','SECTION','2','ENTITIES',...lines,'0','ENDSEC','0','EOF'].join('\r\n')+'\r\n';
+  const blob=new Blob([dxf],{type:'application/dxf;charset=us-ascii'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download='geology_profile_autocad2020.dxf';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000);
+  status('Геологический DXF готов: отметки земли, выклинивание к середине, ИГЭ и подписи скважин через 100 м.');
+ }catch(err){status('Ошибка DXF: '+err.message,true);console.error(err)}
 });
 $('save').addEventListener('click',()=>{
  if(!result)return;
