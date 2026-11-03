@@ -89,6 +89,7 @@ th{position:sticky;top:0;background:var(--soft);font-family:var(--font);font-wei
 <label class="drop" id="d-axis"><input type="file" id="f-axis" accept=".xlsx,.xls"><span class="t">Ведомость координат оси</span><span class="h">ПК в метрах, X, Y</span><span class="f" id="n-axis">Не выбран</span></label>
 <label class="drop" id="d-ground"><input type="file" id="f-ground" accept=".xlsx,.xls"><span class="t">Ведомость отметок земли по оси</span><span class="h">ПК, отметка земли (Z / H / абсолютная отметка)</span><span class="f" id="n-ground">Не выбран</span></label></div></section>
 <section><h2>Параметры</h2><div class="opts">
+<label class="o" for="o-geoscale">Вертикальный масштаб геологии<select id="o-geoscale"><option value="100" selected>1:100</option><option value="200">1:200</option><option value="500">1:500</option></select></label>
 <label class="o" for="o-step">Максимальный шаг, м<input id="o-step" type="number" min="0.01" step="1" value="50"></label>
 <label class="o" for="o-round">Округление мощности<select id="o-round"><option value="1">0,1 м</option><option value="2" selected>0,01 м</option><option value="3">0,001 м</option></select></label>
 <label class="o" for="o-prefix">Префикс имени<input id="o-prefix" value="Фикт."></label>
@@ -657,7 +658,9 @@ $('dxf-export').addEventListener('click',()=>{
   const base=Math.floor(Math.min(...wells.map(w=>groundZ(result.ground,w.pk))))-3;
   const X=p=>(p-startPk)/5;
   const groundY=z=>(z-base)*2; // 1:500 — 2 мм на метр
-  const geoY=(earth,depth)=>groundY(earth)-depth*10; // 1:100 — 10 мм на метр
+  const soilScale=Number($('o-geoscale').value);
+  if(![100,200,500].includes(soilScale))throw Error('Некорректный масштаб геологии');
+  const geoY=(earth,depth)=>groundY(earth)-depth*(1000/soilScale); // Грунты: 1:100, 1:200 или 1:500
   const lines=[],add=(c,v)=>lines.push(String(c),String(v));
   const latin=t=>String(t).replace(/[а-яё]/gi,ch=>{const d={а:'a',б:'b',в:'v',г:'g',д:'d',е:'e',ё:'e',ж:'zh',з:'z',и:'i',й:'y',к:'k',л:'L',м:'m',н:'n',о:'o',п:'p',р:'r',с:'s',т:'t',у:'u',ф:'f',х:'h',ц:'ts',ч:'ch',ш:'sh',щ:'sch',ъ:'',ы:'y',ь:'',э:'e',ю:'yu',я:'ya'};const z=d[ch.toLowerCase()]||'_';return ch===ch.toUpperCase()?z.toUpperCase():z}).replace(/[^\x20-\x7E]/g,'_');
   const layer=t=>latin(t).replace(/[^A-Za-z0-9_-]/g,'_').slice(0,45)||'GEO';
@@ -730,12 +733,12 @@ $('dxf-export').addEventListener('click',()=>{
     lastNamePk=w.pk;
    }
   }
-  tx(cols[0].x,Math.max(...cols.map(w=>groundY(w.earth)))+16,'GEOLOGY H 1:5000  GROUND V 1:500  SOILS V 1:100',3,'TITLE');
+  tx(cols[0].x,Math.max(...cols.map(w=>groundY(w.earth)))+16,'GEOLOGY H 1:5000  GROUND V 1:500  SOILS V 1:'+soilScale,3,'TITLE');
   // Старый ASCII DXF: только простые LINE, SOLID, TEXT без повреждённых таблиц и UTF-8.
   const dxf=['0','SECTION','2','HEADER','9','$ACADVER','1','AC1009','0','ENDSEC','0','SECTION','2','ENTITIES',...lines,'0','ENDSEC','0','EOF'].join('\r\n')+'\r\n';
   const blob=new Blob([dxf],{type:'application/dxf;charset=us-ascii'}),url=URL.createObjectURL(blob),a=document.createElement('a');
   a.href=url;a.download='geology_profile_autocad2020.dxf';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000);
-  status('Геологический DXF готов: отметки земли, выклинивание к середине, ИГЭ и подписи скважин через 100 м.');
+  status('DXF готов. Земля: 1:500, геология: 1:'+soilScale+', горизонталь: 1:5000.');
  }catch(err){status('Ошибка DXF: '+err.message,true);console.error(err)}
 });
 $('save').addEventListener('click',()=>{
