@@ -662,7 +662,7 @@ $('dxf-export').addEventListener('click',()=>{
   const layer=t=>latin(t).replace(/[^A-Za-z0-9_-]/g,'_').slice(0,45)||'GEO';
   const ln=(x1,y1,x2,y2,l)=>{if(![x1,y1,x2,y2].every(Number.isFinite))return;add(0,'LINE');add(8,layer(l));add(10,x1.toFixed(4));add(20,y1.toFixed(4));add(11,x2.toFixed(4));add(21,y2.toFixed(4))};
   const tx=(x,y,t,h,l)=>{if(![x,y,h].every(Number.isFinite))return;add(0,'TEXT');add(8,layer(l));add(10,x.toFixed(4));add(20,y.toFixed(4));add(40,h);add(1,latin(t));add(7,'STANDARD')};
-  const fill=(x1,t1,b1,x2,t2,b2,code)=>{if(Math.min(t1-b1,t2-b2)<0.00001)return;
+  const fill=(x1,t1,b1,x2,t2,b2,code)=>{if(Math.max(t1-b1,t2-b2)<0.00001)return;
    add(0,'SOLID');add(8,'IGE_'+layer(code));add(62,9);
    for(const [i,p] of [[x1,Y(t1)],[x2,Y(t2)],[x1,Y(b1)],[x2,Y(b2)]].entries()){add(10+i,p[0].toFixed(4));add(20+i,p[1].toFixed(4))}
   };
