@@ -777,7 +777,7 @@ $('save').addEventListener('click',()=>{
  const showStatus=(s,bad=false)=>{$('ex-status').textContent=s;$('ex-status').classList.toggle('err',bad)};
  function parseDXF(content){
   const lines=content.replace(/\r/g,'').split('\n'),out={texts:[],circles:[],segments:[]};
-  let entity=null;
+  let entity=null,section=null,expectSection=false;
   function flush(){
    if(!entity)return;
    const g=entity.g;
@@ -793,7 +793,14 @@ $('save').addEventListener('click',()=>{
   }
   for(let i=0;i+1<lines.length;i+=2){
    const code=lines[i].trim(),value=lines[i+1].trim();
-   if(code==='0'){flush();if(['TEXT','CIRCLE','LINE','LWPOLYLINE'].includes(value))entity={type:value,g:{},vertices:[]};continue}
+   if(code==='0'){
+    flush();
+    if(value==='SECTION')expectSection=true;
+    else if(value==='ENDSEC')section=null;
+    else if(section==='ENTITIES'&&['TEXT','CIRCLE','LINE','LWPOLYLINE'].includes(value))entity={type:value,g:{},vertices:[]};
+    continue;
+   }
+   if(code==='2'&&expectSection){section=value;expectSection=false;continue}
    if(!entity)continue;
    if(entity.type==='LWPOLYLINE'&&code==='10'){entity.vertices.push([num(value),NaN]);continue}
    if(entity.type==='LWPOLYLINE'&&code==='20'){if(entity.vertices.length)entity.vertices[entity.vertices.length-1][1]=num(value);continue}
@@ -832,7 +839,7 @@ $('save').addEventListener('click',()=>{
   const pairs=[];
   for(let i=0;i<columns.length;i++)for(let j=0;j<labels.length;j++){
    const c=columns[i],t=labels[j],dx=Math.abs(t.x-c.x),dy=t.y-c.top;
-   if(dx<=18&&dy>=-1&&dy<=22)pairs.push({i,j,score:dx+Math.abs(dy-5)*0.12});
+   if(dx<=18&&dy>=-1&&dy<=40)pairs.push({i,j,score:dx+Math.abs(dy-5)*0.12});
   }
   pairs.sort((a,b)=>a.score-b.score);
   const names=columns.map((_,i)=>'Скв. '+(i+1)),usedI=new Set(),usedJ=new Set(),usedNames=new Set();
@@ -852,7 +859,9 @@ $('save').addEventListener('click',()=>{
    if(p>=0&&x>=0&&y>=0){head=i;pi=p;xi=x;yi=y;break}
   }
   if(head<0)throw Error('Ведомость оси: не найдены столбцы ПК, X, Y.');
-  const pts=rows.slice(head+1).map(r=>[parsePk(r[pi]),num(r[xi]),num(r[yi])]).filter(a=>a.every(Number.isFinite)).sort((a,b)=>a[0]-b[0]);
+  const raw=rows.slice(head+1).map(r=>[parsePk(r[pi]),num(r[xi]),num(r[yi])]).filter(a=>a.every(Number.isFinite)).sort((a,b)=>a[0]-b[0]);
+  const pts=[];
+  for(const p of raw){const last=pts[pts.length-1];if(last&&last[0]===p[0]){if(Math.abs(last[1]-p[1])>0.0005||Math.abs(last[2]-p[2])>0.0005)throw Error('Ведомость оси: одинаковый ПК с разными координатами '+p[0]);continue}pts.push(p)}
   if(pts.length<2)throw Error('Ведомость оси: нужны хотя бы две точки.');
   return pts;
  }
